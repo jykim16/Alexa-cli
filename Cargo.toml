@@ -1,0 +1,59 @@
+[package]
+name = "alexa-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "alexa-cli"
+path = "src/main.rs"
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP + cookie support
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "rustls-tls"] }
+reqwest_cookie_store = { version = "0.8" }
+
+# HTML parsing (for Amazon login form)
+scraper = "0.22"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Secure credential storage
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
+# Config/data directories
+directories = "5"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Output formatting
+tabled = "0.17"
+colored = "2"
+
+# URL handling
+url = "2"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Interactive password prompt
+rpassword = "7"
+
+# UUID for request IDs
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
