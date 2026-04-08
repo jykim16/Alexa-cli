@@ -48,3 +48,65 @@ pub async fn get_history(client: &ApiClient, limit: usize) -> Result<Vec<Activit
     let resp: ActivitiesResponse = client.get(&path).await?;
     Ok(resp.activities.unwrap_or_default())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::Server;
+    use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
+    use std::sync::Arc;
+    use crate::config::Settings;
+
+    fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
+        let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
+        let http = reqwest::Client::builder()
+            .cookie_provider(Arc::clone(&cookie_store))
+            .build()
+            .unwrap();
+        crate::api::ApiClient {
+            http,
+            csrf: "test-csrf".to_string(),
+            base_url: server.url(),
+            cookie_store,
+            settings: Arc::new(Settings::default()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_history_returns_activities() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"activities":[{"id":"h1","creationTimestamp":1000}]}"#)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = get_history(&client, 10).await;
+        assert!(result.is_ok());
+        let activities = result.unwrap();
+        assert_eq!(activities.len(), 1);
+        assert_eq!(activities[0].id.as_deref(), Some("h1"));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_get_history_null_activities_returns_empty_vec() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"activities":null}"#)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = get_history(&client, 10).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+        mock.assert_async().await;
+    }
+}

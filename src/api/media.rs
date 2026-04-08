@@ -104,3 +104,152 @@ pub async fn set_volume(
     send_command(client, "SetVolumeCommand", sn, dt, Some(level)).await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::Server;
+    use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
+    use std::sync::Arc;
+    use crate::config::Settings;
+
+    fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
+        let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
+        let http = reqwest::Client::builder()
+            .cookie_provider(Arc::clone(&cookie_store))
+            .build()
+            .unwrap();
+        crate::api::ApiClient {
+            http,
+            csrf: "test-csrf".to_string(),
+            base_url: server.url(),
+            cookie_store,
+            settings: Arc::new(Settings::default()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_play_ok() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/np/command")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = play(&client, "SN1", "T1").await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_pause_ok() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/np/command")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = pause(&client, "SN1", "T1").await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_next_ok() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/np/command")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = next(&client, "SN1", "T1").await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_previous_ok() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/np/command")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = previous(&client, "SN1", "T1").await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_set_volume_ok() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/np/command")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .match_body(mockito::Matcher::PartialJson(serde_json::json!({"volumeSetting": 50})))
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = set_volume(&client, "SN1", "T1", 50).await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_get_now_playing_with_player_info() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"playerInfo":{"state":"PLAYING","providerId":"SPOTIFY","entityId":"track123"}}"#)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = get_now_playing(&client, "SN1", "T1").await;
+        assert!(result.is_ok());
+        let np = result.unwrap();
+        assert!(np.is_some());
+        let np = np.unwrap();
+        assert_eq!(np.state, Some("PLAYING".to_string()));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_get_now_playing_when_player_info_null() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"playerInfo":null}"#)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = get_now_playing(&client, "SN1", "T1").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+        mock.assert_async().await;
+    }
+}

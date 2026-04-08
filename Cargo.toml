@@ -52,6 +52,14 @@ rpassword = "7"
 # UUID for request IDs
 uuid = { version = "1", features = ["v4"] }
 
+[dev-dependencies]
+# In-process HTTP mock server for unit tests
+mockito = "1"
+# Container-based integration tests
+testcontainers = "0.23"
+# Async test support
+tokio-test = "0.4"
+
 [profile.release]
 opt-level = 3
 lto = true

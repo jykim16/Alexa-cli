@@ -178,3 +178,216 @@ impl ApiClient {
         save_cookie_store(&self.cookie_store)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::Server;
+    use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
+    use std::sync::Arc;
+    use crate::config::Settings;
+
+    fn make_client(server: &mockito::Server) -> ApiClient {
+        let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
+        let http = reqwest::Client::builder()
+            .cookie_provider(Arc::clone(&cookie_store))
+            .build()
+            .unwrap();
+        ApiClient {
+            http,
+            csrf: "test-csrf".to_string(),
+            base_url: server.url(),
+            cookie_store,
+            settings: Arc::new(Settings::default()),
+        }
+    }
+
+    #[test]
+    fn test_alexa_headers_contains_required_keys() {
+        // Create a dummy server just to get a URL
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let server = rt.block_on(Server::new_async());
+        let client = make_client(&server);
+        let headers = client.alexa_headers();
+        let keys: Vec<&str> = headers.iter().map(|(k, _)| *k).collect();
+        assert!(keys.contains(&"X-Csrf-Token"));
+        assert!(keys.contains(&"Accept"));
+        assert!(keys.contains(&"Content-Type"));
+        // Verify CSRF value is correct
+        let csrf_header = headers.iter().find(|(k, _)| *k == "X-Csrf-Token");
+        assert!(csrf_header.is_some());
+        assert_eq!(csrf_header.unwrap().1, "test-csrf");
+    }
+
+    #[tokio::test]
+    async fn test_get_success_deserializes_json() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/test-path")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"key":"value"}"#)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result: Result<serde_json::Value, AlexaError> = client.get("/test-path").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()["key"], "value");
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_get_401_returns_session_expired() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/test-path")
+            .with_status(401)
+            .with_body("unauthorized")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result: Result<serde_json::Value, AlexaError> = client.get("/test-path").await;
+        assert!(matches!(result.unwrap_err(), AlexaError::SessionExpired));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_get_429_returns_rate_limited() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/test-path")
+            .with_status(429)
+            .with_body("too many requests")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result: Result<serde_json::Value, AlexaError> = client.get("/test-path").await;
+        assert!(matches!(result.unwrap_err(), AlexaError::RateLimited));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_post_success_deserializes_json() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/test-post")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"result":"ok"}"#)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let body = serde_json::json!({"data": "test"});
+        let result: Result<serde_json::Value, AlexaError> = client.post("/test-post", &body).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()["result"], "ok");
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_put_success_deserializes_json() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("PUT", "/test-put")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"updated":true}"#)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let body = serde_json::json!({"status": "ON"});
+        let result: Result<serde_json::Value, AlexaError> = client.put("/test-put", &body).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()["updated"], true);
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_put_no_body_success() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("PUT", "/test-put-nobody")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = client.put_no_body("/test-put-nobody").await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_delete_success() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("DELETE", "/test-delete")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = client.delete("/test-delete").await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_delete_404_returns_api_error() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("DELETE", "/test-delete-missing")
+            .with_status(404)
+            .with_body("not found")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = client.delete("/test-delete-missing").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AlexaError::ApiError { status: 404, .. }));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_response_malformed_json_returns_other_error() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/bad-json")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("this is not json at all !!!")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result: Result<serde_json::Value, AlexaError> = client.get("/bad-json").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AlexaError::Other(_)));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_get_text_success() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/text-endpoint")
+            .with_status(200)
+            .with_header("content-type", "text/plain")
+            .with_body("hello world")
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = client.get_text("/text-endpoint").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "hello world");
+        mock.assert_async().await;
+    }
+}

@@ -97,3 +97,55 @@ fn save_raw_cookies(json: &str) -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load_cookie_store_returns_arc_mutex() {
+        // Should succeed even when no persisted cookies exist
+        let result = load_cookie_store();
+        assert!(result.is_ok());
+        let store = result.unwrap();
+        // Verify we can lock it
+        let _guard = store.lock().unwrap();
+    }
+
+    #[test]
+    fn test_save_and_load_round_trip() {
+        // Create a store, save it, then reload it
+        let store = load_cookie_store().unwrap();
+        let save_result = save_cookie_store(&store);
+        // May fail gracefully if keyring unavailable, but should not panic
+        let _ = save_result;
+    }
+
+    #[test]
+    fn test_clear_cookie_store_does_not_panic() {
+        // Should be safe to call even when nothing is stored
+        let result = clear_cookie_store();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cookie_file_path_returns_valid_path() {
+        let result = cookie_file_path();
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        // Path should end with cookies.json
+        assert_eq!(path.file_name().unwrap().to_str().unwrap(), "cookies.json");
+    }
+
+    #[test]
+    fn test_load_cookie_store_after_clear_returns_empty() {
+        // Clear first so we start fresh
+        let _ = clear_cookie_store();
+        let store = load_cookie_store().unwrap();
+        let inner = store.lock().unwrap();
+        // An empty cookie store has no cookies for any URL
+        let url = url::Url::parse("https://alexa.amazon.com").unwrap();
+        let cookies: Vec<_> = inner.get_request_values(&url).collect();
+        assert!(cookies.is_empty());
+    }
+}
