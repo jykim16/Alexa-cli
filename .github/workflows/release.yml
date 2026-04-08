@@ -1,0 +1,157 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── Determine whether this merge introduced a new version ─────────────────
+  prepare:
+    name: Check version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version from Cargo.toml
+        id: read
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag already exists
+        id: check
+        run: |
+          if git rev-parse "v${{ steps.read.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.read.outputs.version }} already exists — skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version v${{ steps.read.outputs.version }} — will release."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Build release binaries for each platform ──────────────────────────────
+  build:
+    name: Build — ${{ matrix.target }}
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: alexa-cli-linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: alexa-cli-linux-aarch64
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-13
+            artifact: alexa-cli-macos-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-14
+            artifact: alexa-cli-macos-aarch64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: alexa-cli-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # Native Linux deps
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux' && !matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev
+
+      # Cross-compilation toolchain for aarch64-linux
+      - name: Install cross
+        if: matrix.cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build (native)
+        if: "!matrix.cross"
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      # Rename and upload — Unix
+      - name: Upload binary (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/${{ matrix.target }}/release/alexa-cli
+          if-no-files-found: error
+
+      # Rename and upload — Windows
+      - name: Upload binary (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/${{ matrix.target }}/release/alexa-cli.exe
+          if-no-files-found: error
+
+  # ── Create GitHub Release and attach all binaries ─────────────────────────
+  release:
+    name: GitHub Release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Rename artifacts for release
+        run: |
+          mkdir release-assets
+          mv artifacts/alexa-cli-linux-x86_64/alexa-cli   release-assets/alexa-cli-linux-x86_64
+          mv artifacts/alexa-cli-linux-aarch64/alexa-cli  release-assets/alexa-cli-linux-aarch64
+          mv artifacts/alexa-cli-macos-x86_64/alexa-cli   release-assets/alexa-cli-macos-x86_64
+          mv artifacts/alexa-cli-macos-aarch64/alexa-cli  release-assets/alexa-cli-macos-aarch64
+          mv artifacts/alexa-cli-windows-x86_64.exe/alexa-cli.exe \
+             release-assets/alexa-cli-windows-x86_64.exe
+          chmod +x release-assets/alexa-cli-linux-*
+          chmod +x release-assets/alexa-cli-macos-*
+
+      - name: Create release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ needs.prepare.outputs.tag }}"
+          git push origin "${{ needs.prepare.outputs.tag }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: alexa-cli ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
+          files: release-assets/*
