@@ -1,5 +1,5 @@
 # ── Stage 1: Build ─────────────────────────────────────────────────────────
-FROM rust:1.78-slim-bookworm AS builder
+FROM rust:1.85-slim-bookworm AS builder
 
 # Install system deps needed for keyring + TLS
 RUN apt-get update && apt-get install -y \
