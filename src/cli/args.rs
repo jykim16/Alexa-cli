@@ -101,13 +101,17 @@ pub enum Commands {
 
 #[derive(Subcommand, Debug)]
 pub enum AuthCommands {
-    /// Log in with your Amazon account
+    /// Log in with your Amazon account.
+    ///
+    /// When `lwa_client_id` is set in config, opens your browser for a
+    /// password-free OAuth PKCE flow. Otherwise falls back to form-based login
+    /// (email + password entered in the terminal).
     Login {
-        /// Amazon account email
+        /// Amazon account email (required for form-based login; optional for browser OAuth)
         #[arg(long)]
-        email: String,
+        email: Option<String>,
     },
-    /// Clear stored session cookies
+    /// Clear stored session cookies and OAuth tokens
     Logout,
     /// Show current authentication status
     Status,

@@ -23,17 +23,56 @@ docker run --rm alexa-cli devices list --output json
 
 ## Authentication
 
-Amazon uses a cookie-based session. Credentials are stored securely:
-- **Password** — keyring (macOS Keychain / GNOME Keyring / Windows Credential Store)
-- **Cookies** — `~/.config/alexa-cli/cookies.json` (mode 0600), or keyring if `ALEXA_SKIP_KEYRING` is unset
-- **CSRF token** — fetched fresh from `/api/bootstrap` each session
+Two login modes are supported. The browser-based flow is recommended — the CLI never sees your password.
 
-### Login
+### Browser-based OAuth (recommended)
+
+Uses OAuth 2.0 Authorization Code + PKCE (RFC 7636 / RFC 8252). Your browser handles the login; the CLI only receives an authorization code.
+
+**One-time setup:** Register a free Security Profile at
+[developer.amazon.com → Login with Amazon](https://developer.amazon.com/loginwithamazon/console/site/lwa/overview.html).
+
+- Create a Security Profile → note the **Client ID**
+- Under *Web Settings*, add `http://127.0.0.1` to **Allowed Return URLs**
+- Add `alexa:all` and `profile` to the **Allowed Scopes** (if prompted)
+
+Add the client ID to your config file (`~/.config/alexa-cli/config.toml`):
+
+```toml
+lwa_client_id = "amzn1.application-oa2-client.YOUR_CLIENT_ID"
+# lwa_client_secret = "..."  # only needed for confidential clients; omit for installed apps
+```
+
+Then log in — a browser tab opens automatically:
+
+```bash
+alexa-cli auth login
+# Browser opens → log in with Amazon → tab shows "Login successful"
+```
+
+**What happens under the hood:**
+1. CLI generates a PKCE code challenge and binds a local listener on `127.0.0.1:<random-port>`
+2. System browser opens to `https://www.amazon.com/ap/oa?...&code_challenge=...`
+3. You authenticate entirely in your browser (CLI never sees the password)
+4. Amazon redirects to `http://127.0.0.1:<port>/callback?code=...`
+5. CLI exchanges the code + PKCE verifier for tokens at `https://api.amazon.com/auth/o2/token`
+6. Access token is posted to `https://www.amazon.com/ap/exchangetoken/sidebar` to obtain Amazon session cookies
+7. Cookies are stored securely (keyring / `~/.config/alexa-cli/cookies.json`)
+
+---
+
+### Form-based login (fallback)
+
+If `lwa_client_id` is not configured, the CLI prompts for email + password directly:
 
 ```bash
 alexa-cli auth login --email you@example.com
 # Prompts for password (not echoed). Handles 2FA (OTP / Amazon app).
 ```
+
+Password is never stored — only the resulting session cookies are persisted.
+
+---
 
 ### Check status
 
@@ -44,8 +83,19 @@ alexa-cli auth status
 ### Logout
 
 ```bash
-alexa-cli auth logout
+alexa-cli auth logout   # clears cookies and OAuth tokens
 ```
+
+---
+
+### Credential storage
+
+| Item | Storage |
+|---|---|
+| Session cookies | Keyring, or `~/.config/alexa-cli/cookies.json` (mode 0600) |
+| OAuth refresh token | Keyring |
+| Password | Never stored |
+| CSRF token | Fetched fresh each session from `/api/bootstrap` |
 
 ---
 
@@ -54,12 +104,17 @@ alexa-cli auth logout
 Config file: `~/.config/alexa-cli/config.toml`
 
 ```toml
-email         = "you@example.com"
-base_url      = "https://alexa.amazon.com"   # US (default)
-# base_url    = "https://alexa.amazon.co.uk" # EU
-# base_url    = "https://layla.amazon.de"    # DE
+email          = "you@example.com"
+base_url       = "https://alexa.amazon.com"    # US (default)
+# base_url     = "https://alexa.amazon.co.uk"  # EU
+# base_url     = "https://layla.amazon.de"     # DE
 default_device = "Living Room Echo"
-locale        = "en-US"
+locale         = "en-US"
+
+# OAuth PKCE browser login (recommended — no password in terminal)
+# Register a Security Profile at developer.amazon.com/loginwithamazon
+lwa_client_id  = "amzn1.application-oa2-client.YOUR_CLIENT_ID"
+# lwa_client_secret = "..."  # omit for public/installed app clients
 ```
 
 Global flags available on every command:

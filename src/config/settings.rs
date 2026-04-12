@@ -25,6 +25,17 @@ pub struct Settings {
     /// Cookie expiry timestamp (Unix seconds), stored to know when to re-auth
     #[serde(default)]
     pub cookie_expires_at: Option<i64>,
+
+    /// Login with Amazon OAuth 2.0 client ID (Security Profile client_id).
+    /// When set, `auth login` uses a browser-based PKCE flow instead of form scraping.
+    /// Register at https://developer.amazon.com/loginwithamazon/console/site/lwa/overview.html
+    #[serde(default)]
+    pub lwa_client_id: Option<String>,
+
+    /// LWA client secret (optional — only needed for confidential clients).
+    /// Public/installed app registrations use PKCE and do not need a secret.
+    #[serde(default)]
+    pub lwa_client_secret: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -43,6 +54,8 @@ impl Default for Settings {
             default_device: None,
             locale: default_locale(),
             cookie_expires_at: None,
+            lwa_client_id: None,
+            lwa_client_secret: None,
         }
     }
 }
