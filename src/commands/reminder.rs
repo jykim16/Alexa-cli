@@ -11,8 +11,14 @@ pub async fn cmd_list(device_name: Option<&str>, output: OutputFormat) -> Result
     let devs = devices::list_devices(&client).await?;
 
     let sn = {
-        let name = device_name.or(settings.default_device.as_deref()).unwrap_or("");
-        let dev = if name.is_empty() { devs.first() } else { devices::find_device(&devs, name) };
+        let name = device_name
+            .or(settings.default_device.as_deref())
+            .unwrap_or("");
+        let dev = if name.is_empty() {
+            devs.first()
+        } else {
+            devices::find_device(&devs, name)
+        };
         match dev {
             Some(d) => d.serial_number.clone(),
             None => bail!("No device found. Use --device."),
@@ -23,13 +29,18 @@ pub async fn cmd_list(device_name: Option<&str>, output: OutputFormat) -> Result
     match output {
         OutputFormat::Json => crate::cli::output::print_json(&items),
         _ => {
-            if items.is_empty() { println!("No reminders."); }
+            if items.is_empty() {
+                println!("No reminders.");
+            }
             for r in &items {
-                let ts = r.trigger_time.map(|t| {
-                    chrono::DateTime::from_timestamp((t / 1000) as i64, 0)
-                        .map(|dt| dt.to_rfc3339())
-                        .unwrap_or_default()
-                }).unwrap_or_default();
+                let ts = r
+                    .trigger_time
+                    .map(|t| {
+                        chrono::DateTime::from_timestamp((t / 1000) as i64, 0)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default()
+                    })
+                    .unwrap_or_default();
                 println!(
                     "{:<30}  {}  {}",
                     r.id.as_deref().unwrap_or("?"),
@@ -52,11 +63,19 @@ pub async fn cmd_create(
     let client = ApiClient::new(Arc::clone(&settings)).await?;
     let devs = devices::list_devices(&client).await?;
 
-    let name = device_name.or(settings.default_device.as_deref()).unwrap_or("");
-    let dev = if name.is_empty() { devs.first() } else { devices::find_device(&devs, name) };
+    let name = device_name
+        .or(settings.default_device.as_deref())
+        .unwrap_or("");
+    let dev = if name.is_empty() {
+        devs.first()
+    } else {
+        devices::find_device(&devs, name)
+    };
     let dev = dev.ok_or_else(|| anyhow::anyhow!("No device found. Use --device."))?;
 
-    let result = reminders::create_reminder(&client, &dev.serial_number, &dev.device_type, text, time).await?;
+    let result =
+        reminders::create_reminder(&client, &dev.serial_number, &dev.device_type, text, time)
+            .await?;
     match output {
         OutputFormat::Json => crate::cli::output::print_json(&result),
         _ => println!("Reminder created: \"{}\" at {}", text, time),

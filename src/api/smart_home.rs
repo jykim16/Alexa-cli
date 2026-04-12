@@ -19,18 +19,6 @@ pub struct SmartHomeCapability {
     pub interface: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PhoenixPayload {
-    network_detail: Option<NetworkDetail>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NetworkDetail {
-    location_details: Option<serde_json::Value>,
-}
-
 pub async fn list_smart_home_devices(
     client: &ApiClient,
 ) -> Result<Vec<SmartHomeDevice>, AlexaError> {
@@ -170,10 +158,10 @@ pub async fn lock(client: &ApiClient, appliance_id: &str, locked: bool) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
@@ -209,7 +197,10 @@ mod tests {
         ];
         let found = find_device(&devices, "bedroom");
         assert!(found.is_some());
-        assert_eq!(found.unwrap().friendly_name.as_deref(), Some("Bedroom Lamp"));
+        assert_eq!(
+            found.unwrap().friendly_name.as_deref(),
+            Some("Bedroom Lamp")
+        );
     }
 
     #[test]

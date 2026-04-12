@@ -89,6 +89,7 @@ impl Settings {
         self.email = email.to_string();
     }
 
+    #[allow(dead_code)]
     pub fn set_default_device(&mut self, device: &str) {
         self.default_device = Some(device.to_string());
     }
@@ -157,7 +158,10 @@ mod tests {
         let now = chrono::Utc::now().timestamp();
         // Should be roughly 14 days (within ±10 seconds)
         let expected = now + 14 * 24 * 3600;
-        assert!((expiry - expected).abs() < 10, "expiry={expiry}, expected≈{expected}");
+        assert!(
+            (expiry - expected).abs() < 10,
+            "expiry={expiry}, expected≈{expected}"
+        );
     }
 
     #[test]

@@ -52,10 +52,10 @@ pub async fn get_history(client: &ApiClient, limit: usize) -> Result<Vec<Activit
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));

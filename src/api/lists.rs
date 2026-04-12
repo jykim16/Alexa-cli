@@ -39,7 +39,10 @@ pub async fn get_todo_list(client: &ApiClient) -> Result<Vec<ListItem>, AlexaErr
 }
 
 async fn get_list(client: &ApiClient, list_type: &str) -> Result<Vec<ListItem>, AlexaError> {
-    let path = format!("/api/todos?type={}&size=100&startTime=&endTime=&completed=false", list_type);
+    let path = format!(
+        "/api/todos?type={}&size=100&startTime=&endTime=&completed=false",
+        list_type
+    );
     let resp: ListsResponse = client.get(&path).await?;
     Ok(resp.values.unwrap_or_default())
 }
@@ -85,6 +88,7 @@ pub async fn complete_item(
     client.put(&format!("/api/todos/{}", item_id), &body).await
 }
 
+#[allow(dead_code)]
 pub fn shopping_type() -> &'static str {
     SHOPPING
 }
@@ -96,10 +100,10 @@ pub fn task_type() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));

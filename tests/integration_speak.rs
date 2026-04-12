@@ -16,7 +16,8 @@ const DEVICES_JSON: &str = r#"{"devices":[
 async fn test_speak_say_sends_behavior_preview() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
     wm.stub_post("/api/behaviors/preview", 200, "{}").await;
 
     let (ok, _, _) = run_binary(
@@ -37,12 +38,10 @@ async fn test_speak_say_sends_behavior_preview() {
 async fn test_speak_announce_sends_behavior_preview() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
     wm.stub_post("/api/behaviors/preview", 200, "{}").await;
 
-    let (ok, _, _) = run_binary(
-        &wm.url,
-        &["speak", "announce", "Dinner is ready"],
-    );
+    let (ok, _, _) = run_binary(&wm.url, &["speak", "announce", "Dinner is ready"]);
     assert!(ok, "speak announce should succeed");
 }

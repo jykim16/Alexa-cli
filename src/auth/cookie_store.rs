@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 
@@ -19,13 +19,13 @@ pub fn cookie_file_path() -> Result<PathBuf> {
 
 /// Load the cookie store from keyring, falling back to the config-dir file.
 /// Returns a CookieStoreMutex suitable for use with reqwest.
+#[allow(deprecated)]
 pub fn load_cookie_store() -> Result<Arc<CookieStoreMutex>> {
     let json = load_raw_cookies()?;
     let store = match json {
         Some(data) => {
             let cursor = std::io::Cursor::new(data.as_bytes());
-            CookieStore::load_json(cursor)
-                .unwrap_or_else(|_| CookieStore::default())
+            CookieStore::load_json(cursor).unwrap_or_else(|_| CookieStore::default())
         }
         None => CookieStore::default(),
     };
@@ -33,6 +33,7 @@ pub fn load_cookie_store() -> Result<Arc<CookieStoreMutex>> {
 }
 
 /// Persist the cookie store back to keyring or file.
+#[allow(deprecated)]
 pub fn save_cookie_store(store: &Arc<CookieStoreMutex>) -> Result<()> {
     let mut buf = Vec::new();
     {

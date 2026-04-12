@@ -22,9 +22,7 @@ struct TimersResponse {
 }
 
 pub async fn list_timers(client: &ApiClient) -> Result<Vec<Timer>, AlexaError> {
-    let resp: TimersResponse = client
-        .get("/api/timers/running?cached=false")
-        .await?;
+    let resp: TimersResponse = client.get("/api/timers/running?cached=false").await?;
     Ok(resp.timers)
 }
 
@@ -73,9 +71,7 @@ pub async fn create_timer(
 }
 
 pub async fn cancel_timer(client: &ApiClient, timer_id: &str) -> Result<(), AlexaError> {
-    client
-        .delete(&format!("/api/timers/{}", timer_id))
-        .await
+    client.delete(&format!("/api/timers/{}", timer_id)).await
 }
 
 pub async fn pause_timer(client: &ApiClient, timer_id: &str) -> Result<(), AlexaError> {
@@ -93,10 +89,10 @@ pub async fn resume_timer(client: &ApiClient, timer_id: &str) -> Result<(), Alex
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));

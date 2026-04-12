@@ -8,14 +8,18 @@ use crate::config::Settings;
 async fn default_device(client: &ApiClient, settings: &Settings) -> Result<(String, String)> {
     let devs = devices::list_devices(client).await?;
     let name = settings.default_device.as_deref().unwrap_or("");
-    let dev = if name.is_empty() { devs.first() } else { devices::find_device(&devs, name) };
+    let dev = if name.is_empty() {
+        devs.first()
+    } else {
+        devices::find_device(&devs, name)
+    };
     match dev {
         Some(d) => Ok((d.serial_number.clone(), d.device_type.clone())),
         None => bail!("No device found. Use --device or set default in config."),
     }
 }
 
-pub async fn cmd_list(device_name: Option<&str>, output: OutputFormat) -> Result<()> {
+pub async fn cmd_list(_device_name: Option<&str>, output: OutputFormat) -> Result<()> {
     let settings = Arc::new(Settings::load()?);
     let client = ApiClient::new(Arc::clone(&settings)).await?;
     let items = timers::list_timers(&client).await?;
@@ -23,7 +27,9 @@ pub async fn cmd_list(device_name: Option<&str>, output: OutputFormat) -> Result
     match output {
         OutputFormat::Json => crate::cli::output::print_json(&items),
         _ => {
-            if items.is_empty() { println!("No running timers."); }
+            if items.is_empty() {
+                println!("No running timers.");
+            }
             for t in &items {
                 println!(
                     "{:<30}  {}s remaining  {}",
@@ -56,7 +62,10 @@ pub async fn cmd_create(
     };
     let secs = timers::parse_duration(duration);
     if secs == 0 {
-        bail!("Invalid duration: {}. Use formats like 1h30m, 90m, 45s.", duration);
+        bail!(
+            "Invalid duration: {}. Use formats like 1h30m, 90m, 45s.",
+            duration
+        );
     }
     let result = timers::create_timer(&client, &sn, &dt, secs, label).await?;
     match output {

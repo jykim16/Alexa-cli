@@ -12,20 +12,14 @@ pub struct DndStatus {
     pub expiry_time: Option<u64>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DndResponse {
-    dnd_response: Option<Vec<DndStatus>>,
-    // Some versions use a flat list
-    #[serde(rename = "doNotDisturbDeviceStatusList")]
-    device_status_list: Option<Vec<DndStatus>>,
-}
-
 pub async fn get_dnd_status(client: &ApiClient) -> Result<Vec<DndStatus>, AlexaError> {
     let raw: serde_json::Value = client.get("/api/dnd/status?cached=false").await?;
 
     // Handle both response shapes
-    if let Some(arr) = raw.get("doNotDisturbDeviceStatusList").and_then(|v| v.as_array()) {
+    if let Some(arr) = raw
+        .get("doNotDisturbDeviceStatusList")
+        .and_then(|v| v.as_array())
+    {
         return Ok(arr
             .iter()
             .filter_map(|v| serde_json::from_value(v.clone()).ok())
@@ -57,10 +51,10 @@ pub async fn set_dnd(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
@@ -84,7 +78,9 @@ mod tests {
             .mock("GET", mockito::Matcher::Any)
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"doNotDisturbDeviceStatusList":[{"deviceSerialNumber":"A","enabled":true}]}"#)
+            .with_body(
+                r#"{"doNotDisturbDeviceStatusList":[{"deviceSerialNumber":"A","enabled":true}]}"#,
+            )
             .create_async()
             .await;
 

@@ -30,7 +30,11 @@ pub async fn cmd_list(output: OutputFormat, device_filter: Option<&str>) -> Resu
                         "{:<40} {:<20} {}",
                         d.account_name,
                         d.device_family,
-                        if d.online.unwrap_or(false) { "online" } else { "offline" }
+                        if d.online.unwrap_or(false) {
+                            "online"
+                        } else {
+                            "offline"
+                        }
                     );
                 }
             }
@@ -54,10 +58,7 @@ pub async fn cmd_get(name: &str, output: OutputFormat) -> Result<()> {
                     ("Type", d.device_type.clone()),
                     ("Serial", d.serial_number.clone()),
                     ("Online", d.online.unwrap_or(false).to_string()),
-                    (
-                        "Software",
-                        d.software_version.clone().unwrap_or_default(),
-                    ),
+                    ("Software", d.software_version.clone().unwrap_or_default()),
                 ]);
             }
         },

@@ -43,9 +43,7 @@ pub async fn create_reminder(
     // Convert ISO8601 to Unix milliseconds
     let trigger_time = chrono::DateTime::parse_from_rfc3339(iso8601_time)
         .map(|dt| dt.timestamp_millis())
-        .unwrap_or_else(|_| {
-            (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp_millis()
-        });
+        .unwrap_or_else(|_| (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp_millis());
 
     let body = json!({
         "deviceSerialNumber": serial_number,
@@ -67,10 +65,10 @@ pub async fn delete_reminder(client: &ApiClient, reminder_id: &str) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));

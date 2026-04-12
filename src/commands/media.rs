@@ -75,11 +75,7 @@ pub async fn cmd_prev(device_name: Option<&str>, output: OutputFormat) -> Result
     Ok(())
 }
 
-pub async fn cmd_volume(
-    level: u8,
-    device_name: Option<&str>,
-    output: OutputFormat,
-) -> Result<()> {
+pub async fn cmd_volume(level: u8, device_name: Option<&str>, output: OutputFormat) -> Result<()> {
     let settings = Arc::new(Settings::load()?);
     let client = ApiClient::new(Arc::clone(&settings)).await?;
     let (sn, dt) = get_device_info(&client, device_name, &settings).await?;
@@ -104,7 +100,10 @@ pub async fn cmd_status(device_name: Option<&str>, output: OutputFormat) -> Resu
                 crate::cli::output::print_pairs(&[
                     ("State", info.state.unwrap_or_else(|| "unknown".to_string())),
                     ("Title", info.title.unwrap_or_else(|| "—".to_string())),
-                    ("Header", info.header_text.unwrap_or_else(|| "—".to_string())),
+                    (
+                        "Header",
+                        info.header_text.unwrap_or_else(|| "—".to_string()),
+                    ),
                 ]);
             }
             None => println!("Nothing playing."),

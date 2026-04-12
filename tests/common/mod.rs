@@ -39,7 +39,10 @@ impl WireMock {
             .expect("Failed to get WireMock host port");
 
         let url = format!("http://127.0.0.1:{}", port);
-        Self { url, _container: container }
+        Self {
+            url,
+            _container: container,
+        }
     }
 
     /// Register a stub mapping via the WireMock Admin REST API.

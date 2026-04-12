@@ -18,14 +18,9 @@ pub struct Sequence {
     pub sequence_json: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct AutomationsResponse(Vec<Automation>);
-
 pub async fn list_automations(client: &ApiClient) -> Result<Vec<Automation>, AlexaError> {
     // The response is a bare JSON array
-    let resp: serde_json::Value = client
-        .get("/api/behaviors/automations?limit=2000")
-        .await?;
+    let resp: serde_json::Value = client.get("/api/behaviors/automations?limit=2000").await?;
 
     if let Some(arr) = resp.as_array() {
         let automations: Vec<Automation> = arr
@@ -39,10 +34,7 @@ pub async fn list_automations(client: &ApiClient) -> Result<Vec<Automation>, Ale
 }
 
 /// Find automation by name (case-insensitive contains).
-pub fn find_automation<'a>(
-    automations: &'a [Automation],
-    name: &str,
-) -> Option<&'a Automation> {
+pub fn find_automation<'a>(automations: &'a [Automation], name: &str) -> Option<&'a Automation> {
     let lower = name.to_lowercase();
     automations.iter().find(|a| {
         a.name
@@ -55,10 +47,10 @@ pub fn find_automation<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
@@ -119,10 +111,7 @@ mod tests {
 
     #[test]
     fn test_find_automation_works_when_name_is_none() {
-        let automations = vec![
-            make_automation(None),
-            make_automation(Some("Good Night")),
-        ];
+        let automations = vec![make_automation(None), make_automation(Some("Good Night"))];
         // The None-named one should be skipped, still finds Good Night
         let found = find_automation(&automations, "good night");
         assert!(found.is_some());
@@ -138,10 +127,12 @@ mod tests {
             .mock("GET", "/api/behaviors/automations?limit=2000")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"[
+            .with_body(
+                r#"[
                 {"automationId":"a1","name":"Routine One","status":"ENABLED"},
                 {"automationId":"a2","name":"Routine Two","status":"DISABLED"}
-            ]"#)
+            ]"#,
+            )
             .create_async()
             .await;
 

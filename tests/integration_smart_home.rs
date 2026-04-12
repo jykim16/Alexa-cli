@@ -60,7 +60,10 @@ async fn test_smart_home_list_returns_devices() {
         .iter()
         .filter_map(|d| d["friendlyName"].as_str())
         .collect();
-    assert!(names.contains(&"Desk Lamp"), "Desk Lamp not found in {names:?}");
+    assert!(
+        names.contains(&"Desk Lamp"),
+        "Desk Lamp not found in {names:?}"
+    );
 }
 
 #[ignore = "requires Docker"]
@@ -69,12 +72,10 @@ async fn test_smart_home_power_on_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
     wm.stub_get("/api/phoenix.*", 200, PHOENIX_JSON).await;
-    wm.stub_put("/api/phoenix/state", 200, r#"{"success":true}"#).await;
+    wm.stub_put("/api/phoenix/state", 200, r#"{"success":true}"#)
+        .await;
 
-    let (ok, _, _) = run_binary(
-        &wm.url,
-        &["smart-home", "power", "Desk Lamp", "on"],
-    );
+    let (ok, _, _) = run_binary(&wm.url, &["smart-home", "power", "Desk Lamp", "on"]);
     assert!(ok, "smart-home power on should succeed");
 }
 
@@ -84,12 +85,10 @@ async fn test_smart_home_power_off_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
     wm.stub_get("/api/phoenix.*", 200, PHOENIX_JSON).await;
-    wm.stub_put("/api/phoenix/state", 200, r#"{"success":true}"#).await;
+    wm.stub_put("/api/phoenix/state", 200, r#"{"success":true}"#)
+        .await;
 
-    let (ok, _, _) = run_binary(
-        &wm.url,
-        &["smart-home", "power", "Desk Lamp", "off"],
-    );
+    let (ok, _, _) = run_binary(&wm.url, &["smart-home", "power", "Desk Lamp", "off"]);
     assert!(ok, "smart-home power off should succeed");
 }
 
@@ -99,12 +98,10 @@ async fn test_smart_home_brightness_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
     wm.stub_get("/api/phoenix.*", 200, PHOENIX_JSON).await;
-    wm.stub_put("/api/phoenix/state", 200, r#"{"success":true}"#).await;
+    wm.stub_put("/api/phoenix/state", 200, r#"{"success":true}"#)
+        .await;
 
-    let (ok, _, _) = run_binary(
-        &wm.url,
-        &["smart-home", "brightness", "Desk Lamp", "75"],
-    );
+    let (ok, _, _) = run_binary(&wm.url, &["smart-home", "brightness", "Desk Lamp", "75"]);
     assert!(ok, "smart-home brightness should succeed");
 }
 
@@ -114,11 +111,19 @@ async fn test_smart_home_thermostat_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
     wm.stub_get("/api/phoenix.*", 200, PHOENIX_JSON).await;
-    wm.stub_put("/api/phoenix/state", 200, r#"{"success":true}"#).await;
+    wm.stub_put("/api/phoenix/state", 200, r#"{"success":true}"#)
+        .await;
 
     let (ok, _, _) = run_binary(
         &wm.url,
-        &["smart-home", "thermostat", "Office Thermostat", "72", "--unit", "F"],
+        &[
+            "smart-home",
+            "thermostat",
+            "Office Thermostat",
+            "72",
+            "--unit",
+            "F",
+        ],
     );
     assert!(ok, "smart-home thermostat should succeed");
 }

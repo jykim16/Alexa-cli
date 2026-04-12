@@ -40,8 +40,10 @@ async fn test_dnd_status_returns_device_list() {
 async fn test_dnd_enable_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
-    wm.stub_put("/api/dnd/status", 200, r#"{"enabled":true}"#).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
+    wm.stub_put("/api/dnd/status", 200, r#"{"enabled":true}"#)
+        .await;
 
     let (ok, _, _) = run_binary(&wm.url, &["dnd", "enable", "--device", "Bedroom"]);
     assert!(ok, "dnd enable should succeed");
@@ -52,8 +54,10 @@ async fn test_dnd_enable_exits_zero() {
 async fn test_dnd_disable_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
-    wm.stub_put("/api/dnd/status", 200, r#"{"enabled":false}"#).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
+    wm.stub_put("/api/dnd/status", 200, r#"{"enabled":false}"#)
+        .await;
 
     let (ok, _, _) = run_binary(&wm.url, &["dnd", "disable", "--device", "Bedroom"]);
     assert!(ok, "dnd disable should succeed");

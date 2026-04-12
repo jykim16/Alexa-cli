@@ -8,8 +8,7 @@ use reqwest_cookie_store::CookieStoreMutex;
 use crate::auth::cookie_store::save_cookie_store;
 use crate::config::Settings;
 
-const LOGIN_URL: &str =
-    "https://www.amazon.com/ap/signin?openid.pape.max_auth_age=0\
+const LOGIN_URL: &str = "https://www.amazon.com/ap/signin?openid.pape.max_auth_age=0\
      &openid.return_to=https%3A%2F%2Fwww.amazon.com%2F\
      &openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select\
      &openid.assoc_handle=usflex\
@@ -54,7 +53,10 @@ pub async fn login(
         .context("Failed to GET Amazon login page")?;
 
     let login_url_final = resp.url().clone();
-    let body = resp.text().await.context("Failed to read login page body")?;
+    let body = resp
+        .text()
+        .await
+        .context("Failed to read login page body")?;
 
     let mut form_fields = extract_hidden_fields(&body);
     form_fields.insert("email".to_string(), email.to_string());
@@ -62,8 +64,7 @@ pub async fn login(
     form_fields.insert("rememberMe".to_string(), "true".to_string());
 
     // Determine POST action URL
-    let post_url = extract_form_action(&body)
-        .unwrap_or_else(|| login_url_final.to_string());
+    let post_url = extract_form_action(&body).unwrap_or_else(|| login_url_final.to_string());
 
     // Step 2: POST credentials
     eprintln!("Submitting credentials...");
@@ -88,8 +89,8 @@ pub async fn login(
              and then use `alexa-cli auth import-cookies` to import your session."
         );
     } else if resp_body.contains("ap_error") || resp_body.contains("auth-error-message") {
-        let error = extract_error_message(&resp_body)
-            .unwrap_or_else(|| "Unknown login error".to_string());
+        let error =
+            extract_error_message(&resp_body).unwrap_or_else(|| "Unknown login error".to_string());
         bail!("Login failed: {}", error);
     } else if final_url.host_str() == Some("alexa.amazon.com")
         || final_url.host_str() == Some("www.amazon.com")
@@ -124,7 +125,7 @@ async fn handle_mfa(
     client: &reqwest::Client,
     body: &str,
     current_url: &url::Url,
-    cookie_store: &Arc<CookieStoreMutex>,
+    _cookie_store: &Arc<CookieStoreMutex>,
 ) -> Result<()> {
     let mut fields = extract_hidden_fields(body);
 
@@ -145,8 +146,7 @@ async fn handle_mfa(
     let resp_body = resp.text().await.context("Failed to read MFA response")?;
 
     if resp_body.contains("ap_error") || resp_body.contains("auth-error-message") {
-        let error = extract_error_message(&resp_body)
-            .unwrap_or_else(|| "Invalid OTP".to_string());
+        let error = extract_error_message(&resp_body).unwrap_or_else(|| "Invalid OTP".to_string());
         bail!("MFA failed: {}", error);
     }
 
@@ -169,10 +169,7 @@ pub(crate) fn extract_hidden_fields(html: &str) -> HashMap<String, String> {
     let sel = Selector::parse("input[type=hidden]").unwrap();
     let mut map = HashMap::new();
     for el in doc.select(&sel) {
-        if let (Some(name), Some(value)) = (
-            el.value().attr("name"),
-            el.value().attr("value"),
-        ) {
+        if let (Some(name), Some(value)) = (el.value().attr("name"), el.value().attr("value")) {
             map.insert(name.to_string(), value.to_string());
         }
     }

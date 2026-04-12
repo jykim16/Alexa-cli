@@ -5,17 +5,15 @@ use crate::api::{behaviors, devices, ApiClient};
 use crate::cli::OutputFormat;
 use crate::config::Settings;
 
-pub async fn cmd_say(
-    text: &str,
-    device_name: Option<&str>,
-    output: OutputFormat,
-) -> Result<()> {
+pub async fn cmd_say(text: &str, device_name: Option<&str>, output: OutputFormat) -> Result<()> {
     let settings = Arc::new(Settings::load()?);
     let locale = settings.locale.clone();
     let client = ApiClient::new(Arc::clone(&settings)).await?;
     let devs = devices::list_devices(&client).await?;
 
-    let name = device_name.or(settings.default_device.as_deref()).unwrap_or("");
+    let name = device_name
+        .or(settings.default_device.as_deref())
+        .unwrap_or("");
     let dev = if name.is_empty() {
         devs.first()
     } else {

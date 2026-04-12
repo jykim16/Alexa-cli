@@ -12,8 +12,8 @@ struct BehaviorPreviewRequest {
 }
 
 async fn post_behavior(client: &ApiClient, sequence: serde_json::Value) -> Result<(), AlexaError> {
-    let seq_json = serde_json::to_string(&sequence)
-        .map_err(|e| AlexaError::Other(e.to_string()))?;
+    let seq_json =
+        serde_json::to_string(&sequence).map_err(|e| AlexaError::Other(e.to_string()))?;
 
     let req = BehaviorPreviewRequest {
         behavior_id: "PREVIEW".to_string(),
@@ -148,10 +148,10 @@ pub async fn run_routine_sequence(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
@@ -231,7 +231,15 @@ mod tests {
             .await;
 
         let client = make_client(&server);
-        let result = play_music(&client, "rock classics", "SN1", "T1", "en-US", Some("spotify")).await;
+        let result = play_music(
+            &client,
+            "rock classics",
+            "SN1",
+            "T1",
+            "en-US",
+            Some("spotify"),
+        )
+        .await;
         assert!(result.is_ok());
         mock.assert_async().await;
     }

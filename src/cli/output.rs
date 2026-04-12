@@ -1,16 +1,11 @@
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, clap::ValueEnum)]
 pub enum OutputFormat {
+    #[default]
     Text,
     Json,
     Table,
-}
-
-impl Default for OutputFormat {
-    fn default() -> Self {
-        Self::Text
-    }
 }
 
 /// Print a value as JSON to stdout.
@@ -19,11 +14,6 @@ pub fn print_json<T: Serialize>(value: &T) {
         "{}",
         serde_json::to_string_pretty(value).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
     );
-}
-
-/// Print a success message.
-pub fn print_success(msg: &str) {
-    println!("{}", msg);
 }
 
 /// Print a list of (label, value) pairs as a simple table.
@@ -52,7 +42,10 @@ mod tests {
             count: u32,
         }
         // Just verify it doesn't panic and produces valid JSON
-        let foo = Foo { name: "test", count: 42 };
+        let foo = Foo {
+            name: "test",
+            count: 42,
+        };
         // Capture output by calling the serializer directly
         let json = serde_json::to_string_pretty(&foo).unwrap();
         assert!(json.contains("test"));

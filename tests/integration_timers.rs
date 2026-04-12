@@ -42,12 +42,21 @@ async fn test_timer_list_returns_json_array() {
 async fn test_timer_create_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
-    wm.stub_post("/api/timers", 200, r#"{"id":"timer-new"}"#).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
+    wm.stub_post("/api/timers", 200, r#"{"id":"timer-new"}"#)
+        .await;
 
     let (ok, _, _) = run_binary(
         &wm.url,
-        &["timer", "create", "--duration", "10m", "--device", "Kitchen"],
+        &[
+            "timer",
+            "create",
+            "--duration",
+            "10m",
+            "--device",
+            "Kitchen",
+        ],
     );
     assert!(ok, "timer create should succeed");
 }

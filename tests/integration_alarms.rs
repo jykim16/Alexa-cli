@@ -30,8 +30,8 @@ async fn test_alarm_list_returns_json_array() {
 
     let (ok, stdout, _) = run_binary(&wm.url, &["alarm", "list", "--output", "json"]);
     assert!(ok, "alarm list should succeed");
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .unwrap_or_else(|_| panic!("not JSON: {stdout}"));
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|_| panic!("not JSON: {stdout}"));
     let arr = json.as_array().expect("expected array");
     assert_eq!(arr.len(), 2);
     assert_eq!(arr[0]["id"], "alarm-1");
@@ -43,7 +43,8 @@ async fn test_alarm_list_returns_json_array() {
 async fn test_alarm_create_returns_new_alarm_json() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
     wm.stub_post("/api/alarms", 200, NEW_ALARM_JSON).await;
 
     let (ok, stdout, _) = run_binary(
@@ -83,7 +84,8 @@ async fn test_alarm_delete_exits_zero() {
 async fn test_alarm_enable_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_put("/api/alarms/alarm-1", 200, r#"{"status":"ON"}"#).await;
+    wm.stub_put("/api/alarms/alarm-1", 200, r#"{"status":"ON"}"#)
+        .await;
 
     let (ok, _, _) = run_binary(&wm.url, &["alarm", "enable", "alarm-1"]);
     assert!(ok, "alarm enable should succeed");
@@ -94,7 +96,8 @@ async fn test_alarm_enable_exits_zero() {
 async fn test_alarm_disable_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_put("/api/alarms/alarm-1", 200, r#"{"status":"OFF"}"#).await;
+    wm.stub_put("/api/alarms/alarm-1", 200, r#"{"status":"OFF"}"#)
+        .await;
 
     let (ok, _, _) = run_binary(&wm.url, &["alarm", "disable", "alarm-1"]);
     assert!(ok, "alarm disable should succeed");

@@ -21,10 +21,15 @@ const REMINDERS_JSON: &str = r#"{"reminders":[
 async fn test_reminder_list_returns_json_array() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
-    wm.stub_get("/api/reminders/device.*", 200, REMINDERS_JSON).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
+    wm.stub_get("/api/reminders/device.*", 200, REMINDERS_JSON)
+        .await;
 
-    let (ok, stdout, _) = run_binary(&wm.url, &["reminder", "list", "--device", "Office", "--output", "json"]);
+    let (ok, stdout, _) = run_binary(
+        &wm.url,
+        &["reminder", "list", "--device", "Office", "--output", "json"],
+    );
     assert!(ok, "reminder list should succeed");
     let arr = serde_json::from_str::<serde_json::Value>(&stdout)
         .expect("valid JSON")
@@ -40,7 +45,8 @@ async fn test_reminder_list_returns_json_array() {
 async fn test_reminder_create_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
     wm.stub_post(
         "/api/reminders",
         200,

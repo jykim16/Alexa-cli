@@ -40,7 +40,10 @@ async fn test_history_list_with_limit_exits_zero() {
     wm.stub_bootstrap().await;
     wm.stub_get("/api/activities.*", 200, HISTORY_JSON).await;
 
-    let (ok, stdout, _) = run_binary(&wm.url, &["history", "list", "--limit", "1", "--output", "json"]);
+    let (ok, stdout, _) = run_binary(
+        &wm.url,
+        &["history", "list", "--limit", "1", "--output", "json"],
+    );
     assert!(ok, "history list --limit should succeed");
     // Might return up to 1 item depending on server response
     let arr = serde_json::from_str::<serde_json::Value>(&stdout)
@@ -56,7 +59,8 @@ async fn test_history_list_with_limit_exits_zero() {
 async fn test_history_list_empty_returns_empty_array() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/activities.*", 200, r#"{"activities":[]}"#).await;
+    wm.stub_get("/api/activities.*", 200, r#"{"activities":[]}"#)
+        .await;
 
     let (ok, stdout, _) = run_binary(&wm.url, &["history", "list", "--output", "json"]);
     assert!(ok);

@@ -28,9 +28,7 @@ struct AlarmsResponse {
 }
 
 pub async fn list_alarms(client: &ApiClient) -> Result<Vec<Alarm>, AlexaError> {
-    let resp: AlarmsResponse = client
-        .get("/api/alerts/running?cached=false")
-        .await?;
+    let resp: AlarmsResponse = client.get("/api/alerts/running?cached=false").await?;
     Ok(resp.alarms)
 }
 
@@ -73,10 +71,7 @@ pub(crate) fn format_alarm_time(time_str: &str) -> String {
         (7, 0)
     };
     // Schedule for today, or tomorrow if time has passed
-    let mut dt = now
-        .date_naive()
-        .and_hms_opt(h, m, 0)
-        .unwrap_or_default();
+    let mut dt = now.date_naive().and_hms_opt(h, m, 0).unwrap_or_default();
     if dt < now.naive_local() {
         dt += chrono::Duration::days(1);
     }
@@ -94,16 +89,18 @@ pub async fn set_alarm_enabled(
 ) -> Result<serde_json::Value, AlexaError> {
     let status = if enabled { "ON" } else { "OFF" };
     let body = json!({ "status": status });
-    client.put(&format!("/api/alarms/{}", alarm_id), &body).await
+    client
+        .put(&format!("/api/alarms/{}", alarm_id), &body)
+        .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
@@ -149,7 +146,9 @@ mod tests {
             .mock("GET", "/api/alerts/running?cached=false")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"alarms":[{"deviceSerialNumber":"ABC","deviceType":"T1","status":"ON"}]}"#)
+            .with_body(
+                r#"{"alarms":[{"deviceSerialNumber":"ABC","deviceType":"T1","status":"ON"}]}"#,
+            )
             .create_async()
             .await;
 
@@ -221,7 +220,9 @@ mod tests {
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{}"#)
-            .match_body(mockito::Matcher::PartialJson(serde_json::json!({"status": "OFF"})))
+            .match_body(mockito::Matcher::PartialJson(
+                serde_json::json!({"status": "OFF"}),
+            ))
             .create_async()
             .await;
 

@@ -43,10 +43,10 @@ pub fn find_device<'a>(devices: &'a [Device], name: &str) -> Option<&'a Device> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
@@ -135,7 +135,10 @@ mod tests {
         let client = make_client(&server);
         let result = list_devices(&client).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), crate::api::errors::AlexaError::SessionExpired));
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::api::errors::AlexaError::SessionExpired
+        ));
         mock.assert_async().await;
     }
 }

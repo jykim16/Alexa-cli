@@ -18,7 +18,8 @@ const DEVICES_JSON: &str = r#"{"devices":[
 async fn test_devices_list_returns_json_array() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
 
     let (ok, stdout, _stderr) = run_binary(&wm.url, &["devices", "list", "--output", "json"]);
     assert!(ok, "devices list should succeed");
@@ -35,15 +36,15 @@ async fn test_devices_list_returns_json_array() {
 async fn test_devices_get_returns_device_info() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON).await;
+    wm.stub_get("/api/devices-v2/device.*", 200, DEVICES_JSON)
+        .await;
 
     let (ok, stdout, _) = run_binary(
         &wm.url,
         &["devices", "get", "--device", "Kitchen", "--output", "json"],
     );
     assert!(ok, "devices get should succeed");
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .expect("expected JSON output");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("expected JSON output");
     assert_eq!(json["accountName"], "Kitchen Dot");
     assert_eq!(json["serialNumber"], "SN002");
 }
@@ -53,7 +54,8 @@ async fn test_devices_get_returns_device_info() {
 async fn test_devices_list_session_expired_exits_nonzero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/devices-v2/device.*", 401, "unauthorized").await;
+    wm.stub_get("/api/devices-v2/device.*", 401, "unauthorized")
+        .await;
 
     let (ok, _stdout, _stderr) = run_binary(&wm.url, &["devices", "list"]);
     assert!(!ok, "devices list on 401 should fail");

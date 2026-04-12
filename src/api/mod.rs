@@ -11,7 +11,7 @@ pub mod reminders;
 pub mod smart_home;
 pub mod timers;
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 
@@ -26,7 +26,11 @@ pub struct ApiClient {
     pub http: reqwest::Client,
     pub csrf: String,
     pub base_url: String,
+    /// Kept alive so reqwest's cookie provider isn't dropped; exposed for persist_cookies and tests.
+    #[allow(dead_code)]
     pub cookie_store: Arc<CookieStoreMutex>,
+    /// Exposed for tests and future command modules.
+    #[allow(dead_code)]
     pub settings: Arc<Settings>,
 }
 
@@ -51,12 +55,12 @@ impl ApiClient {
     fn alexa_headers(&self) -> Vec<(&'static str, String)> {
         vec![
             ("Accept", "application/json".to_string()),
-            ("Content-Type", "application/json; charset=UTF-8".to_string()),
-            ("X-Csrf-Token", self.csrf.clone()),
             (
-                "Referer",
-                format!("{}/spa/index.html", self.base_url),
+                "Content-Type",
+                "application/json; charset=UTF-8".to_string(),
             ),
+            ("X-Csrf-Token", self.csrf.clone()),
+            ("Referer", format!("{}/spa/index.html", self.base_url)),
             ("Origin", self.base_url.clone()),
         ]
     }
@@ -71,6 +75,7 @@ impl ApiClient {
         self.handle_response(resp).await
     }
 
+    #[allow(dead_code)]
     pub async fn get_text(&self, path: &str) -> Result<String, AlexaError> {
         let url = format!("{}{}", self.base_url, path);
         let mut req = self.http.get(&url);
@@ -97,16 +102,6 @@ impl ApiClient {
             req = req.header(k, v);
         }
         let resp = req.json(body).send().await?;
-        self.handle_response(resp).await
-    }
-
-    pub async fn post_empty<T: DeserializeOwned>(&self, path: &str) -> Result<T, AlexaError> {
-        let url = format!("{}{}", self.base_url, path);
-        let mut req = self.http.post(&url);
-        for (k, v) in self.alexa_headers() {
-            req = req.header(k, v);
-        }
-        let resp = req.send().await?;
         self.handle_response(resp).await
     }
 
@@ -164,7 +159,10 @@ impl ApiClient {
             serde_json::from_slice(&bytes).map_err(|e| {
                 AlexaError::Other(format!(
                     "JSON parse error: {e}\nBody: {}",
-                    String::from_utf8_lossy(&bytes).chars().take(500).collect::<String>()
+                    String::from_utf8_lossy(&bytes)
+                        .chars()
+                        .take(500)
+                        .collect::<String>()
                 ))
             })
         } else {
@@ -174,6 +172,7 @@ impl ApiClient {
     }
 
     /// Save cookies after operations that may set new session cookies.
+    #[allow(dead_code)]
     pub fn persist_cookies(&self) -> Result<()> {
         save_cookie_store(&self.cookie_store)
     }
@@ -182,10 +181,10 @@ impl ApiClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));

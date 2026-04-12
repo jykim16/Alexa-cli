@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum AlexaError {
     #[error("Not authenticated. Run `alexa-cli auth login` first.")]
     NotAuthenticated,

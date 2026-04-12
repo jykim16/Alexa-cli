@@ -108,10 +108,10 @@ pub async fn set_volume(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Settings;
     use mockito::Server;
     use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
     use std::sync::Arc;
-    use crate::config::Settings;
 
     fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
         let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
@@ -204,7 +204,9 @@ mod tests {
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{}")
-            .match_body(mockito::Matcher::PartialJson(serde_json::json!({"volumeSetting": 50})))
+            .match_body(mockito::Matcher::PartialJson(
+                serde_json::json!({"volumeSetting": 50}),
+            ))
             .create_async()
             .await;
 

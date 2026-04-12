@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::auth::{clear_cookie_store, load_cookie_store, login};
-use crate::auth::login::build_client;
 use crate::auth::fetch_csrf;
+use crate::auth::login::build_client;
+use crate::auth::{clear_cookie_store, load_cookie_store, login};
 use crate::cli::OutputFormat;
 use crate::config::Settings;
 

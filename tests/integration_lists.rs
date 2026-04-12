@@ -24,7 +24,8 @@ const TODO_JSON: &str = r#"{"values":[
 async fn test_shopping_list_returns_json_array() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/todos.*SHOPPING_ITEM.*", 200, SHOPPING_JSON).await;
+    wm.stub_get("/api/todos.*SHOPPING_ITEM.*", 200, SHOPPING_JSON)
+        .await;
 
     let (ok, stdout, _) = run_binary(&wm.url, &["shopping", "list", "--output", "json"]);
     assert!(ok);
@@ -65,7 +66,8 @@ async fn test_shopping_remove_exits_zero() {
 async fn test_shopping_clear_deletes_all_items() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_get("/api/todos.*SHOPPING_ITEM.*", 200, SHOPPING_JSON).await;
+    wm.stub_get("/api/todos.*SHOPPING_ITEM.*", 200, SHOPPING_JSON)
+        .await;
     // clear deletes each item individually
     wm.stub_delete("/api/todos/.*", 200).await;
 
@@ -99,8 +101,12 @@ async fn test_todo_list_returns_json_array() {
 async fn test_todo_add_exits_zero() {
     let wm = WireMock::start().await;
     wm.stub_bootstrap().await;
-    wm.stub_post("/api/todos", 200, r#"{"itemId":"t-new","value":"water plants"}"#)
-        .await;
+    wm.stub_post(
+        "/api/todos",
+        200,
+        r#"{"itemId":"t-new","value":"water plants"}"#,
+    )
+    .await;
 
     let (ok, _, _) = run_binary(&wm.url, &["todo", "add", "water plants"]);
     assert!(ok, "todo add should succeed");
