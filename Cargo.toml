@@ -16,7 +16,7 @@ tokio = { version = "1", features = ["full"] }
 
 # HTTP + cookie support
 reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "rustls-tls"] }
-reqwest_cookie_store = { version = "0.8" }
+reqwest_cookie_store = "0.8"
 
 # HTML parsing (for Amazon login form)
 scraper = "0.22"
@@ -37,7 +37,6 @@ thiserror = "2"
 anyhow = "1"
 
 # Output formatting
-tabled = "0.17"
 colored = "2"
 
 # URL handling
@@ -51,10 +50,6 @@ rpassword = "7"
 
 # UUID for request IDs
 uuid = { version = "1", features = ["v4"] }
-sha2 = "0.11.0"
-rand = "0.10.1"
-base64 = "0.22.1"
-urlencoding = "2.1.3"
 
 [profile.release]
 opt-level = 3
