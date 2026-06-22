@@ -28,6 +28,7 @@ pub struct ApiClient {
     pub base_url: String,
     pub cookie_store: Arc<CookieStoreMutex>,
     pub settings: Arc<Settings>,
+    pub raw_cookies: String,
 }
 
 impl ApiClient {
@@ -37,21 +38,21 @@ impl ApiClient {
         let http = build_client(Arc::clone(&cookie_store))?;
         let base_url = settings.base_url.clone();
 
-        // Try bootstrap first, fall back to csrf cookie value
-        let csrf = match fetch_csrf(&http, &base_url).await {
-            Ok(token) => token,
-            Err(_) => {
-                // Extract csrf from cookie store
-                let store = cookie_store.lock().unwrap();
-                let url = url::Url::parse(&base_url).unwrap();
-                let val = store
-                    .get_request_values(&url)
-                    .find(|(name, _)| *name == "csrf")
-                    .map(|(_, val)| val.to_string())
-                    .unwrap_or_default();
-                val
-            }
-        };
+        // Build raw cookie string from cookie file for direct header injection
+        let raw_cookies = crate::auth::cookie_store::load_raw_cookie_string()?;
+
+        // Extract csrf from the raw cookies
+        let csrf = raw_cookies
+            .split(';')
+            .find_map(|pair| {
+                let pair = pair.trim();
+                if pair.starts_with("csrf=") {
+                    Some(pair[5..].to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
 
         Ok(Self {
             http,
@@ -59,11 +60,13 @@ impl ApiClient {
             base_url,
             cookie_store,
             settings,
+            raw_cookies,
         })
     }
 
     pub(crate) fn alexa_headers(&self) -> Vec<(&'static str, String)> {
         vec![
+            ("Cookie", self.raw_cookies.clone()),
             ("Accept", "application/json".to_string()),
             ("Content-Type", "application/json; charset=UTF-8".to_string()),
             ("csrf", self.csrf.clone()),

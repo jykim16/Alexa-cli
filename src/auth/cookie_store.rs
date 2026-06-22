@@ -17,6 +17,32 @@ pub fn cookie_file_path() -> Result<PathBuf> {
     Ok(dir.join("cookies.json"))
 }
 
+/// Load cookies as a raw "name=value; name=value" string for direct header injection.
+pub fn load_raw_cookie_string() -> Result<String> {
+    let path = cookie_file_path()?;
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    let data = fs::read_to_string(&path).unwrap_or_default();
+    let mut pairs = Vec::new();
+    for line in data.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // Extract "name=value" from raw_cookie field
+        if let Some(start) = line.find("\"raw_cookie\":\"") {
+            let rest = &line[start + 14..];
+            if let Some(end) = rest.find(';') {
+                pairs.push(rest[..end].to_string());
+            } else if let Some(end) = rest.find('"') {
+                pairs.push(rest[..end].to_string());
+            }
+        }
+    }
+    Ok(pairs.join("; "))
+}
+
 /// Load the cookie store from keyring, falling back to the config-dir file.
 /// Returns a CookieStoreMutex suitable for use with reqwest.
 pub fn load_cookie_store() -> Result<Arc<CookieStoreMutex>> {
