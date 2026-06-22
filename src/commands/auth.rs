@@ -9,29 +9,28 @@ use crate::config::Settings;
 pub async fn cmd_login(email: &str, output: OutputFormat) -> Result<()> {
     let mut settings = Settings::load()?;
 
-    // Use device code flow if lwa_client_id is configured
-    if settings.lwa_client_id.is_some() {
+    // Try refresh token if available
+    if settings.refresh_token.is_some() {
         settings.set_email(email);
-        crate::auth::cbl::device_code_login(&mut settings).await?;
-        match output {
-            OutputFormat::Json => println!("{{\"status\":\"authenticated\",\"email\":\"{}\"}}", email),
-            _ => println!("Logged in as {}", email),
+        match crate::auth::cbl::refresh_login(&mut settings).await {
+            Ok(()) => {
+                match output {
+                    OutputFormat::Json => println!("{{\"status\":\"authenticated\",\"email\":\"{}\"}}", email),
+                    _ => println!("Logged in as {} (refreshed token)", email),
+                }
+                return Ok(());
+            }
+            Err(e) => eprintln!("Token refresh failed ({}), prompting for password...", e),
         }
-        return Ok(());
     }
 
-    // Fall back to form-based login
+    // Primary: OAuth device registration login
     let password = rpassword::prompt_password("Amazon password: ")?;
-    let cookie_store = load_cookie_store()?;
-    login(email, &password, cookie_store, &mut settings).await?;
+    crate::auth::device_login::login(email, &password, &mut settings).await?;
 
     match output {
-        OutputFormat::Json => {
-            println!("{{\"status\":\"authenticated\",\"email\":\"{}\"}}", email);
-        }
-        _ => {
-            println!("Logged in as {}", email);
-        }
+        OutputFormat::Json => println!("{{\"status\":\"authenticated\",\"email\":\"{}\"}}", email),
+        _ => println!("Logged in as {}", email),
     }
     Ok(())
 }

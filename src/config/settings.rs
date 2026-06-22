@@ -30,6 +30,10 @@ pub struct Settings {
     #[serde(default)]
     pub lwa_client_id: Option<String>,
 
+    /// LWA client secret
+    #[serde(default)]
+    pub lwa_client_secret: Option<String>,
+
     /// AVS product ID
     #[serde(default)]
     pub avs_product_id: Option<String>,
@@ -60,6 +64,7 @@ impl Default for Settings {
             locale: default_locale(),
             cookie_expires_at: None,
             lwa_client_id: None,
+            lwa_client_secret: None,
             avs_product_id: None,
             device_serial_number: None,
             refresh_token: None,
