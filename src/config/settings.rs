@@ -25,6 +25,22 @@ pub struct Settings {
     /// Cookie expiry timestamp (Unix seconds), stored to know when to re-auth
     #[serde(default)]
     pub cookie_expires_at: Option<i64>,
+
+    /// LWA client_id for device code login
+    #[serde(default)]
+    pub lwa_client_id: Option<String>,
+
+    /// AVS product ID
+    #[serde(default)]
+    pub avs_product_id: Option<String>,
+
+    /// Device serial number (auto-generated)
+    #[serde(default)]
+    pub device_serial_number: Option<String>,
+
+    /// Stored refresh token
+    #[serde(default)]
+    pub refresh_token: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -43,6 +59,10 @@ impl Default for Settings {
             default_device: None,
             locale: default_locale(),
             cookie_expires_at: None,
+            lwa_client_id: None,
+            avs_product_id: None,
+            device_serial_number: None,
+            refresh_token: None,
         }
     }
 }
@@ -93,6 +113,16 @@ impl Settings {
     pub fn mark_authenticated(&mut self) {
         let expires = chrono::Utc::now() + chrono::Duration::days(14);
         self.cookie_expires_at = Some(expires.timestamp());
+    }
+
+    pub fn ensure_device_serial_number(&mut self) -> Result<String> {
+        if let Some(ref serial) = self.device_serial_number {
+            return Ok(serial.clone());
+        }
+        let serial = uuid::Uuid::new_v4().simple().to_string();
+        self.device_serial_number = Some(serial.clone());
+        self.save()?;
+        Ok(serial)
     }
 
     pub fn is_cookie_expired(&self) -> bool {

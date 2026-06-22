@@ -7,11 +7,22 @@ use crate::cli::OutputFormat;
 use crate::config::Settings;
 
 pub async fn cmd_login(email: &str, output: OutputFormat) -> Result<()> {
-    let password = rpassword::prompt_password("Amazon password: ")?;
-
     let mut settings = Settings::load()?;
-    let cookie_store = load_cookie_store()?;
 
+    // Use device code flow if lwa_client_id is configured
+    if settings.lwa_client_id.is_some() {
+        settings.set_email(email);
+        crate::auth::cbl::device_code_login(&mut settings).await?;
+        match output {
+            OutputFormat::Json => println!("{{\"status\":\"authenticated\",\"email\":\"{}\"}}", email),
+            _ => println!("Logged in as {}", email),
+        }
+        return Ok(());
+    }
+
+    // Fall back to form-based login
+    let password = rpassword::prompt_password("Amazon password: ")?;
+    let cookie_store = load_cookie_store()?;
     login(email, &password, cookie_store, &mut settings).await?;
 
     match output {

@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use std::fs;
 use scraper::{Html, Selector};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -102,16 +103,44 @@ pub async fn login(
         eprintln!("Warning: unexpected login response page. Proceeding to verify session...");
     }
 
-    // Step 4: Hit alexa.amazon.com to establish Alexa session cookies
-    let alexa_url = format!("{}/", &settings.base_url);
+    // Step 4: Hit alexa.amazon.com sign-in to get at-main token
+    let signin_url = format!("{}/signin", &settings.base_url);
     client
-        .get(&alexa_url)
+        .get(&signin_url)
         .send()
         .await
-        .context("Failed to initialize Alexa session")?;
+        .context("Failed to hit Alexa sign-in")?;
+
+    // Also hit the SPA to trigger any additional cookie sets
+    let spa_url = format!("{}/spa/index.html", &settings.base_url);
+    client
+        .get(&spa_url)
+        .send()
+        .await
+        .context("Failed to load Alexa SPA")?;
+
+    // Debug: dump cookies we have
+    {
+        let store = cookie_store.lock().unwrap();
+        let url = url::Url::parse(&settings.base_url).unwrap();
+        let cookies: Vec<_> = store.get_request_values(&url).collect();
+        eprintln!("[debug] cookies for {}: {:?}", settings.base_url, cookies.iter().map(|(n,_)| *n).collect::<Vec<_>>());
+    }
 
     // Step 5: Persist cookies
     save_cookie_store(&cookie_store)?;
+    // Also write raw cookie file for direct header injection
+    {
+        let store = cookie_store.lock().unwrap();
+        let url = url::Url::parse(&settings.base_url).unwrap();
+        let cookies: Vec<_> = store.get_request_values(&url)
+            .map(|(name, value)| format!(
+                "{{\"raw_cookie\":\"{name}={value}; Secure; Path=/; Domain=.amazon.com\",\"path\":[\"/\",true],\"domain\":{{\"Suffix\":\"amazon.com\"}},\"expires\":{{\"AtUtc\":\"2036-01-01T08:00:01Z\"}}}}"
+            ))
+            .collect();
+        let path = crate::auth::cookie_store::cookie_file_path()?;
+        fs::write(&path, cookies.join("\n")).context("Failed to write cookie file")?;
+    }
     settings.set_email(email);
     settings.mark_authenticated();
     settings.save()?;
