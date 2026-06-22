@@ -11,23 +11,44 @@ const PYTHON_LOGIN_SCRIPT: &str = include_str!("../../scripts/login_helper.py");
 pub async fn login(email: &str, _password: &str, settings: &mut Settings) -> Result<()> {
     let password = rpassword::prompt_password("Amazon password: ")?;
 
-    eprintln!("Enter your OTP code (or press Enter if 2FA not enabled):");
-    let mut otp = String::new();
-    std::io::stdin().read_line(&mut otp)?;
-    let otp = otp.trim();
+    eprintln!("Connecting to Amazon...");
 
-    eprintln!("Logging in...");
-
-    // Write the script to a temp file and run it
+    // Write the script to a temp file
     let tmp_script = std::env::temp_dir().join("alexa_cli_login.py");
     std::fs::write(&tmp_script, PYTHON_LOGIN_SCRIPT)?;
 
-    let mut cmd = Command::new("python3");
-    cmd.arg(&tmp_script).arg(email).arg(&password).arg(otp);
+    // Step 1: Trigger OTP send (attempt login without real OTP)
+    let output = Command::new("python3")
+        .arg(&tmp_script)
+        .arg(email)
+        .arg(&password)
+        .output()
+        .context("Failed to run Python login helper. Is python3 installed with aioamazondevices? Run: pip3 install aioamazondevices")?;
 
-    let output = cmd.output().context("Failed to run Python login helper. Is python3 installed with aioamazondevices? Run: pip3 install aioamazondevices")?;
+    if output.status.code() == Some(2) {
+        // OTP was triggered, now ask for it
+        eprintln!("OTP code sent to your device.");
+        let otp = rpassword::prompt_password("Enter OTP code: ")?;
 
-    // Clean up
+        eprintln!("Logging in...");
+        let output = Command::new("python3")
+            .arg(&tmp_script)
+            .arg(email)
+            .arg(&password)
+            .arg(otp.trim())
+            .output()
+            .context("Failed to run login with OTP")?;
+
+        let _ = std::fs::remove_file(&tmp_script);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("Login failed: {}", stderr.trim());
+        }
+
+        return save_cookies_from_output(&output.stdout, settings, email);
+    }
+
     let _ = std::fs::remove_file(&tmp_script);
 
     if !output.status.success() {
@@ -35,8 +56,12 @@ pub async fn login(email: &str, _password: &str, settings: &mut Settings) -> Res
         bail!("Login failed: {}", stderr.trim());
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let cookies: std::collections::HashMap<String, String> = serde_json::from_str(stdout.trim())
+    save_cookies_from_output(&output.stdout, settings, email)
+}
+
+fn save_cookies_from_output(stdout: &[u8], settings: &mut Settings, email: &str) -> Result<()> {
+    let stdout_str = String::from_utf8_lossy(stdout);
+    let cookies: std::collections::HashMap<String, String> = serde_json::from_str(stdout_str.trim())
         .context("Failed to parse login response")?;
 
     if cookies.is_empty() {

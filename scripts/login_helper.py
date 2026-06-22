@@ -4,7 +4,6 @@ import asyncio
 import json
 import sys
 
-from aioamazondevices.api import AmazonDevice
 from aioamazondevices.login import AmazonLogin
 from aioamazondevices.http_wrapper import AmazonHttpWrapper, AmazonSessionStateData
 from aiohttp import ClientSession
@@ -36,9 +35,20 @@ def main():
     password = sys.argv[2]
     otp = sys.argv[3] if len(sys.argv) > 3 else ""
     
+    # If no OTP provided, first attempt triggers Amazon to send the code
+    if not otp:
+        # Try with empty OTP - this will fail but triggers the SMS/push
+        try:
+            login_data = asyncio.run(do_login(email, password, "000000"))
+            print(json.dumps(login_data.get("website_cookies", {})))
+            return
+        except Exception:
+            # Expected to fail - OTP was sent to phone
+            print("OTP_NEEDED", flush=True)
+            sys.exit(2)
+    
     try:
         login_data = asyncio.run(do_login(email, password, otp))
-        # Output just the website_cookies as JSON
         print(json.dumps(login_data.get("website_cookies", {})))
     except Exception as e:
         print(f"Login failed: {e}", file=sys.stderr)
