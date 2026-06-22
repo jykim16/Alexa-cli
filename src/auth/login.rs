@@ -147,7 +147,7 @@ async fn handle_mfa(
     client: &reqwest::Client,
     body: &str,
     current_url: &url::Url,
-    cookie_store: &Arc<CookieStoreMutex>,
+    _cookie_store: &Arc<CookieStoreMutex>,
 ) -> Result<()> {
     let mut fields = extract_hidden_fields(body);
 

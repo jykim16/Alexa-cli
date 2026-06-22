@@ -107,42 +107,6 @@ pub async fn announce(
     post_behavior(client, sequence).await
 }
 
-/// Play music by search phrase on a device.
-pub async fn play_music(
-    client: &ApiClient,
-    query: &str,
-    serial_number: &str,
-    device_type: &str,
-    locale: &str,
-    service: Option<&str>,
-) -> Result<(), AlexaError> {
-    let provider = match service {
-        Some("spotify") => "SPOTIFY",
-        Some("amazon-music") | Some("amazon") => "AMAZON_MUSIC",
-        Some("apple-music") | Some("apple") => "APPLE_MUSIC",
-        Some("pandora") => "PANDORA",
-        Some("tunein") => "TUNEIN",
-        Some("iheartradio") => "I_HEART_RADIO",
-        _ => "AMAZON_MUSIC",
-    };
-
-    let sequence = json!({
-        "@type": "com.amazon.alexa.behaviors.model.Sequence",
-        "startNode": {
-            "@type": "com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode",
-            "type": "Alexa.Music.PlaySearchPhrase",
-            "operationPayload": {
-                "deviceType": device_type,
-                "deviceSerialNumber": serial_number,
-                "locale": locale,
-                "musicProviderId": provider,
-                "searchPhrase": query
-            }
-        }
-    });
-    post_behavior(client, sequence).await
-}
-
 /// Send a text command to a device (simulates a voice query — device speaks the answer).
 pub async fn text_command(
     client: &ApiClient,
@@ -168,18 +132,4 @@ pub async fn text_command(
         }
     });
     post_behavior(client, sequence).await
-}
-
-/// Run a routine by its sequence JSON (fetched from automations API).
-pub async fn run_routine_sequence(
-    client: &ApiClient,
-    sequence_json: &str,
-) -> Result<(), AlexaError> {
-    let req = BehaviorPreviewRequest {
-        behavior_id: "PREVIEW".to_string(),
-        sequence_json: sequence_json.to_string(),
-        status: "ENABLED".to_string(),
-    };
-    let _: serde_json::Value = client.post("/api/behaviors/preview", &req).await?;
-    Ok(())
 }

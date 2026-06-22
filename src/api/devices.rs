@@ -12,13 +12,8 @@ pub struct Device {
     pub device_owner_customer_id: Option<String>,
     pub software_version: Option<String>,
     pub online: Option<bool>,
+    #[serde(default)]
     pub capabilities: Option<Vec<String>>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Capability {
-    pub interface_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

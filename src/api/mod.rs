@@ -2,7 +2,7 @@ pub mod behaviors;
 pub mod devices;
 pub mod errors;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::sync::Arc;
 
 use reqwest_cookie_store::CookieStoreMutex;

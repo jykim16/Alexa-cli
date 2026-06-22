@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 

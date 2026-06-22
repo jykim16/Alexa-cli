@@ -21,15 +21,35 @@ pub fn print_json<T: Serialize>(value: &T) {
     );
 }
 
-/// Print a success message.
-pub fn print_success(msg: &str) {
-    println!("{}", msg);
-}
-
 /// Print a list of (label, value) pairs as a simple table.
 pub fn print_pairs(pairs: &[(&str, String)]) {
     let max_len = pairs.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
     for (k, v) in pairs {
         println!("{:<width$}  {}", k, v, width = max_len);
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_output_format_default() {
+        assert_eq!(OutputFormat::default(), OutputFormat::Text);
+    }
+
+    #[test]
+    fn test_print_json() {
+        // Just verify it doesn't panic
+        #[derive(Serialize)]
+        struct Test { value: i32 }
+        print_json(&Test { value: 42 });
+    }
+
+    #[test]
+    fn test_print_pairs() {
+        // Just verify it doesn't panic
+        print_pairs(&[("Key", "Value".to_string())]);
     }
 }

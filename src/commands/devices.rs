@@ -38,30 +38,3 @@ pub async fn cmd_list(output: OutputFormat, device_filter: Option<&str>) -> Resu
     }
     Ok(())
 }
-
-pub async fn cmd_get(name: &str, output: OutputFormat) -> Result<()> {
-    let settings = Arc::new(Settings::load()?);
-    let client = ApiClient::new(settings).await?;
-    let devs = devices::list_devices(&client).await?;
-
-    match devices::find_device(&devs, name) {
-        Some(d) => match output {
-            OutputFormat::Json => crate::cli::output::print_json(d),
-            _ => {
-                crate::cli::output::print_pairs(&[
-                    ("Name", d.account_name.clone()),
-                    ("Family", d.device_family.clone()),
-                    ("Type", d.device_type.clone()),
-                    ("Serial", d.serial_number.clone()),
-                    ("Online", d.online.unwrap_or(false).to_string()),
-                    (
-                        "Software",
-                        d.software_version.clone().unwrap_or_default(),
-                    ),
-                ]);
-            }
-        },
-        None => anyhow::bail!("Device not found: {}", name),
-    }
-    Ok(())
-}

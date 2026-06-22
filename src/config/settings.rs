@@ -110,24 +110,10 @@ impl Settings {
         self.email = email.to_string();
     }
 
-    pub fn set_default_device(&mut self, device: &str) {
-        self.default_device = Some(device.to_string());
-    }
-
     /// Mark cookies as valid for the next 14 days
     pub fn mark_authenticated(&mut self) {
         let expires = chrono::Utc::now() + chrono::Duration::days(14);
         self.cookie_expires_at = Some(expires.timestamp());
-    }
-
-    pub fn ensure_device_serial_number(&mut self) -> Result<String> {
-        if let Some(ref serial) = self.device_serial_number {
-            return Ok(serial.clone());
-        }
-        let serial = uuid::Uuid::new_v4().simple().to_string();
-        self.device_serial_number = Some(serial.clone());
-        self.save()?;
-        Ok(serial)
     }
 
     pub fn is_cookie_expired(&self) -> bool {
@@ -139,5 +125,82 @@ impl Settings {
                 now >= ts - 3600
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_settings_default() {
+        let s = Settings::default();
+        assert_eq!(s.email, "");
+        assert_eq!(s.base_url, "https://alexa.amazon.com");
+        assert_eq!(s.locale, "en-US");
+        assert!(s.default_device.is_none());
+        assert!(s.cookie_expires_at.is_none());
+    }
+
+    #[test]
+    fn test_settings_set_email() {
+        let mut s = Settings::default();
+        s.set_email("test@example.com");
+        assert_eq!(s.email, "test@example.com");
+    }
+
+    #[test]
+    fn test_settings_is_cookie_expired_none() {
+        let s = Settings::default();
+        assert!(s.is_cookie_expired());
+    }
+
+    #[test]
+    fn test_settings_is_cookie_expired_past() {
+        let mut s = Settings::default();
+        s.cookie_expires_at = Some(0); // Unix epoch = long past
+        assert!(s.is_cookie_expired());
+    }
+
+    #[test]
+    fn test_settings_is_cookie_expired_future() {
+        let mut s = Settings::default();
+        // Set expiry to 1 year from now
+        let future = chrono::Utc::now().timestamp() + 365 * 24 * 3600;
+        s.cookie_expires_at = Some(future);
+        assert!(!s.is_cookie_expired());
+    }
+
+    #[test]
+    fn test_settings_is_cookie_expired_within_hour() {
+        let mut s = Settings::default();
+        // Set expiry to 30 minutes from now (within 1 hour buffer)
+        let soon = chrono::Utc::now().timestamp() + 30 * 60;
+        s.cookie_expires_at = Some(soon);
+        assert!(s.is_cookie_expired()); // Should be considered expired
+    }
+
+    #[test]
+    fn test_settings_mark_authenticated() {
+        let mut s = Settings::default();
+        assert!(s.cookie_expires_at.is_none());
+        s.mark_authenticated();
+        assert!(s.cookie_expires_at.is_some());
+        assert!(!s.is_cookie_expired());
+    }
+
+    #[test]
+    fn test_settings_serialization_roundtrip() {
+        let mut s = Settings::default();
+        s.email = "test@example.com".to_string();
+        s.default_device = Some("Echo".to_string());
+        
+        let toml = toml::to_string(&s).unwrap();
+        let parsed: Settings = toml::from_str(&toml).unwrap();
+        
+        assert_eq!(parsed.email, "test@example.com");
+        assert_eq!(parsed.default_device, Some("Echo".to_string()));
+        assert_eq!(parsed.base_url, "https://alexa.amazon.com");
     }
 }
