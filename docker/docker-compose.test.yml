@@ -34,9 +34,10 @@ services:
     command: >
       cargo test -- --include-ignored 2>&1
     volumes:
-      # Mount the source tree so we don't have to rebuild for every code change
-      - ..:/app:ro
-      # Persist the build cache across runs
+      # Persist the build cache across runs. The source tree is baked into the
+      # image via `COPY . .` in Dockerfile.test, so we do NOT bind-mount it here:
+      # a read-only `..:/app:ro` mount makes runc unable to create the
+      # `/app/target` mountpoint for this volume ("read-only file system").
       - alexa-cli-target:/app/target
 
 volumes:
