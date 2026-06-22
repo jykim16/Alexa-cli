@@ -1,6 +1,6 @@
 # Dockerfile used only for running the test suite (with cargo test).
 # The production binary Dockerfile is docker/Dockerfile.
-FROM rust:1.85-slim-bookworm
+FROM rust:1.88-slim-bookworm
 
 RUN apt-get update && apt-get install -y \
     pkg-config \
