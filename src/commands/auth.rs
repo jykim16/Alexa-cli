@@ -3,25 +3,30 @@ use anyhow::{bail, Result};
 use crate::auth::fetch_csrf;
 use crate::auth::login::build_client;
 use crate::auth::{
-    browser_login, clear_cookie_store, clear_refresh_token, load_cookie_store, login,
+    clear_cookie_store, clear_refresh_token, device_code_login, load_cookie_store, login,
 };
 use crate::cli::OutputFormat;
 use crate::config::Settings;
 
 /// `alexa-cli auth login [--email <email>]`
 ///
-/// When `lwa_client_id` is configured → browser-based OAuth PKCE (no password in CLI).
+/// When `lwa_client_id` and `avs_product_id` are configured → device-pairing
+/// login via https://amazon.com/code (no password in CLI).
 /// Otherwise → form-based login (email + password prompted in terminal).
 pub async fn cmd_login(email: Option<&str>, output: OutputFormat) -> Result<()> {
     let mut settings = Settings::load()?;
     let cookie_store = load_cookie_store()?;
 
-    let logged_in_email = if let Some(client_id) = settings.lwa_client_id.clone() {
-        // ── Browser-based OAuth PKCE ─────────────────────────────────────
-        let client_secret = settings.lwa_client_secret.clone();
-        browser_login(
+    let logged_in_email = if let (Some(client_id), Some(product_id)) = (
+        settings.lwa_client_id.clone(),
+        settings.avs_product_id.clone(),
+    ) {
+        // ── Device-pairing (Code-Based Linking) ──────────────────────────
+        let device_serial_number = settings.ensure_device_serial_number()?;
+        device_code_login(
             &client_id,
-            client_secret.as_deref(),
+            &product_id,
+            &device_serial_number,
             cookie_store,
             &mut settings,
         )
@@ -34,10 +39,13 @@ pub async fn cmd_login(email: Option<&str>, output: OutputFormat) -> Result<()> 
             bail!(
                 "Email is required for form-based login.\n\
                  Usage: alexa-cli auth login --email you@example.com\n\n\
-                 For a more secure browser-based login (no password in terminal), \
-                 set `lwa_client_id` in your config file (~/.config/alexa-cli/config.toml).\n\
+                 For a more secure device-pairing login (no password in terminal), \
+                 set `lwa_client_id` and `avs_product_id` in your config file \
+                 (~/.config/alexa-cli/config.toml).\n\
                  Register a free Security Profile at:\n  \
-                 https://developer.amazon.com/loginwithamazon/console/site/lwa/overview.html"
+                 https://developer.amazon.com/loginwithamazon/console/site/lwa/overview.html\n\
+                 and an AVS product at:\n  \
+                 https://developer.amazon.com/alexa/console/avs"
             );
         }
         let password = rpassword::prompt_password("Amazon password: ")?;
@@ -98,8 +106,8 @@ pub async fn cmd_status(output: OutputFormat) -> Result<()> {
         })
         .unwrap_or_else(|| "n/a".to_string());
 
-    let auth_method = if settings.lwa_client_id.is_some() {
-        "oauth-pkce"
+    let auth_method = if settings.lwa_client_id.is_some() && settings.avs_product_id.is_some() {
+        "device-pairing"
     } else {
         "form"
     };

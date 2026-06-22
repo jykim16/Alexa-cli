@@ -49,12 +49,8 @@ chrono = { version = "0.4", features = ["serde"] }
 # Interactive password prompt
 rpassword = "7"
 
-# OAuth PKCE browser-based login
-sha2 = "0.10"
-rand = "0.8"
+# OAuth device-pairing login (opens browser to amazon.com/code)
 webbrowser = "0.8"
-base64 = { version = "0.22", features = ["alloc"] }
-urlencoding = "2"
 
 # UUID for request IDs
 uuid = { version = "1", features = ["v4"] }

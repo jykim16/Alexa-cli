@@ -36,6 +36,17 @@ pub struct Settings {
     /// Public/installed app registrations use PKCE and do not need a secret.
     #[serde(default)]
     pub lwa_client_secret: Option<String>,
+
+    /// AVS (Alexa Voice Service) Product ID. Required for the device-pairing
+    /// (Code-Based Linking) login flow, which needs an `alexa:all` scoped
+    /// product registered at https://developer.amazon.com/alexa/console/avs.
+    #[serde(default)]
+    pub avs_product_id: Option<String>,
+
+    /// Device serial number used to identify this CLI instance when pairing.
+    /// Auto-generated and persisted on first device-pairing login if unset.
+    #[serde(default)]
+    pub device_serial_number: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -56,6 +67,8 @@ impl Default for Settings {
             cookie_expires_at: None,
             lwa_client_id: None,
             lwa_client_secret: None,
+            avs_product_id: None,
+            device_serial_number: None,
         }
     }
 }
@@ -111,6 +124,18 @@ impl Settings {
     pub fn mark_authenticated(&mut self) {
         let expires = chrono::Utc::now() + chrono::Duration::days(14);
         self.cookie_expires_at = Some(expires.timestamp());
+    }
+
+    /// Returns the device serial number used for device-pairing login,
+    /// generating and persisting a random one on first use.
+    pub fn ensure_device_serial_number(&mut self) -> Result<String> {
+        if let Some(ref serial) = self.device_serial_number {
+            return Ok(serial.clone());
+        }
+        let serial = uuid::Uuid::new_v4().simple().to_string();
+        self.device_serial_number = Some(serial.clone());
+        self.save()?;
+        Ok(serial)
     }
 
     pub fn is_cookie_expired(&self) -> bool {

@@ -23,47 +23,47 @@ docker run --rm alexa-cli devices list --output json
 
 ## Authentication
 
-Two login modes are supported. The browser-based flow is recommended — the CLI never sees your password.
+Two login modes are supported. The device-pairing flow is recommended — the CLI never sees your password.
 
-### Browser-based OAuth (recommended)
+### Device-pairing login (recommended)
 
-Uses OAuth 2.0 Authorization Code + PKCE (RFC 7636 / RFC 8252). Your browser handles the login; the CLI only receives an authorization code.
+Uses Amazon's OAuth 2.0 Device Authorization Grant (RFC 8628), the same "Code-Based Linking" flow Echo and Fire TV devices use to pair with an account. You enter a short code at `https://amazon.com/code`; the CLI never touches your password and doesn't need to run a local web server.
 
-**One-time setup:** Register a free Security Profile at
-[developer.amazon.com → Login with Amazon](https://developer.amazon.com/loginwithamazon/console/site/lwa/overview.html).
+**One-time setup:**
 
-- Create a Security Profile → note the **Client ID**
-- Under *Web Settings*, add `http://127.0.0.1` to **Allowed Return URLs**
-- Add `alexa:all` and `profile` to the **Allowed Scopes** (if prompted)
+1. Register a free Security Profile at
+   [developer.amazon.com → Login with Amazon](https://developer.amazon.com/loginwithamazon/console/site/lwa/overview.html) → note the **Client ID**.
+2. Register an AVS product (scoped for `alexa:all`) at
+   [developer.amazon.com → Alexa Voice Service console](https://developer.amazon.com/alexa/console/avs) → note the **Product ID**.
 
-Add the client ID to your config file (`~/.config/alexa-cli/config.toml`):
+Add both to your config file (`~/.config/alexa-cli/config.toml`):
 
 ```toml
-lwa_client_id = "amzn1.application-oa2-client.YOUR_CLIENT_ID"
-# lwa_client_secret = "..."  # only needed for confidential clients; omit for installed apps
+lwa_client_id   = "amzn1.application-oa2-client.YOUR_CLIENT_ID"
+avs_product_id  = "YOUR_AVS_PRODUCT_ID"
 ```
 
-Then log in — a browser tab opens automatically:
+Then log in:
 
 ```bash
 alexa-cli auth login
-# Browser opens → log in with Amazon → tab shows "Login successful"
+# To sign in, visit: https://amazon.com/code
+# and enter this code: ABCD-1234
 ```
 
 **What happens under the hood:**
-1. CLI generates a PKCE code challenge and binds a local listener on `127.0.0.1:<random-port>`
-2. System browser opens to `https://www.amazon.com/ap/oa?...&code_challenge=...`
-3. You authenticate entirely in your browser (CLI never sees the password)
-4. Amazon redirects to `http://127.0.0.1:<port>/callback?code=...`
-5. CLI exchanges the code + PKCE verifier for tokens at `https://api.amazon.com/auth/o2/token`
-6. Access token is posted to `https://www.amazon.com/ap/exchangetoken/sidebar` to obtain Amazon session cookies
-7. Cookies are stored securely (keyring / `~/.config/alexa-cli/cookies.json`)
+1. CLI POSTs to `https://api.amazon.com/auth/O2/create/codepair` to obtain a `user_code` / `device_code` pair, scoped to a randomly generated device serial number (persisted in config)
+2. CLI shows the `user_code` and opens `https://amazon.com/code` in your browser
+3. You authenticate entirely on amazon.com (CLI never sees the password)
+4. CLI polls `https://api.amazon.com/auth/o2/token` with the `device_code` until you approve
+5. Access token is posted to `https://www.amazon.com/ap/exchangetoken/sidebar` to obtain Amazon session cookies
+6. Cookies are stored securely (keyring / `~/.config/alexa-cli/cookies.json`)
 
 ---
 
 ### Form-based login (fallback)
 
-If `lwa_client_id` is not configured, the CLI prompts for email + password directly:
+If `lwa_client_id` / `avs_product_id` are not configured, the CLI prompts for email + password directly:
 
 ```bash
 alexa-cli auth login --email you@example.com
@@ -93,7 +93,7 @@ alexa-cli auth logout   # clears cookies and OAuth tokens
 | Item | Storage |
 |---|---|
 | Session cookies | Keyring, or `~/.config/alexa-cli/cookies.json` (mode 0600) |
-| OAuth refresh token | Keyring |
+| LWA refresh token | Keyring |
 | Password | Never stored |
 | CSRF token | Fetched fresh each session from `/api/bootstrap` |
 
@@ -111,10 +111,11 @@ base_url       = "https://alexa.amazon.com"    # US (default)
 default_device = "Living Room Echo"
 locale         = "en-US"
 
-# OAuth PKCE browser login (recommended — no password in terminal)
+# Device-pairing login (recommended — no password in terminal)
 # Register a Security Profile at developer.amazon.com/loginwithamazon
+# and an AVS product at developer.amazon.com/alexa/console/avs
 lwa_client_id  = "amzn1.application-oa2-client.YOUR_CLIENT_ID"
-# lwa_client_secret = "..."  # omit for public/installed app clients
+avs_product_id = "YOUR_AVS_PRODUCT_ID"
 ```
 
 Global flags available on every command:

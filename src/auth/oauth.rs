@@ -1,24 +1,22 @@
-//! Browser-based OAuth 2.0 Authorization Code + PKCE login flow (RFC 7636 / RFC 8252).
+//! Device Authorization Grant / Amazon "Code-Based Linking" (CBL) login flow
+//! (RFC 8628), the same flow used by Echo and Fire TV devices to pair with an
+//! Amazon account via https://amazon.com/code.
 //!
 //! Flow:
-//!   1. Generate a random PKCE code_verifier and derive the code_challenge.
-//!   2. Bind a local TCP listener on 127.0.0.1 (random port).
-//!   3. Open the system browser to Amazon's authorization URL.
-//!   4. Wait for Amazon to redirect back to http://127.0.0.1:<port>/callback?code=...
-//!   5. Exchange the authorization code + code_verifier for tokens.
-//!   6. POST the access_token to Amazon's token-exchange endpoint to obtain
-//!      amazon.com session cookies, then follow the redirect to alexa.amazon.com
-//!      to finalize the Alexa session.
+//!   1. POST to Amazon's codepair endpoint to obtain a `user_code` and
+//!      `device_code`.
+//!   2. Show the user the `user_code` and the verification URL
+//!      (https://amazon.com/code), optionally opening it in a browser.
+//!   3. Poll the token endpoint with the `device_code` until the user has
+//!      entered the code and approved the request (or the code expires).
+//!   4. POST the resulting access_token to Amazon's token-exchange endpoint to
+//!      obtain amazon.com session cookies, then follow through to
+//!      alexa.amazon.com to finalize the Alexa session.
 
 use anyhow::{bail, Context, Result};
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
-use rand::RngCore;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
+use std::time::Duration;
 
 use reqwest_cookie_store::CookieStoreMutex;
 
@@ -28,94 +26,76 @@ use crate::config::Settings;
 
 // ── Amazon OAuth endpoints ────────────────────────────────────────────────────
 
-const AMAZON_AUTH_URL: &str = "https://www.amazon.com/ap/oa";
+const AMAZON_CODEPAIR_URL: &str = "https://api.amazon.com/auth/O2/create/codepair";
 const AMAZON_TOKEN_URL: &str = "https://api.amazon.com/auth/o2/token";
 /// Exchanges a web access_token for amazon.com session cookies.
 const AMAZON_EXCHANGE_URL: &str = "https://www.amazon.com/ap/exchangetoken/sidebar";
+/// User-facing page where the device code is entered.
+const VERIFICATION_URI: &str = "https://amazon.com/code";
 
 /// Scopes needed to access alexa.amazon.com internal APIs.
-/// `profile` establishes the identity; `alexa:all` covers device/behavior APIs.
-const OAUTH_SCOPES: &str = "profile%20alexa%3Aall";
+const OAUTH_SCOPES: &str = "alexa:all";
 
-// ── PKCE helpers ─────────────────────────────────────────────────────────────
+// ── Device code request ───────────────────────────────────────────────────────
 
-/// Generate a cryptographically random PKCE code_verifier (43–128 chars, base64url, no padding).
-fn generate_code_verifier() -> String {
-    let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    URL_SAFE_NO_PAD.encode(bytes)
+#[derive(Deserialize)]
+struct CodePairResponse {
+    user_code: String,
+    device_code: String,
+    #[serde(default)]
+    verification_uri: Option<String>,
+    #[serde(default)]
+    interval: Option<u64>,
+    #[serde(default)]
+    expires_in: Option<u64>,
 }
 
-/// Derive the code_challenge from a code_verifier: BASE64URL(SHA256(verifier)).
-fn derive_code_challenge(verifier: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(verifier.as_bytes());
-    URL_SAFE_NO_PAD.encode(hasher.finalize())
-}
+/// Request a `user_code` / `device_code` pair from Amazon, scoped to this
+/// "device" (identified by `product_id` + `device_serial_number`, which an
+/// AVS Product registration assigns).
+async fn request_code_pair(
+    client_id: &str,
+    product_id: &str,
+    device_serial_number: &str,
+) -> Result<CodePairResponse> {
+    let http = reqwest::Client::new();
 
-// ── Callback server ───────────────────────────────────────────────────────────
+    let scope_data = serde_json::json!({
+        "alexa:all": {
+            "productID": product_id,
+            "productInstanceAttributes": {
+                "deviceSerialNumber": device_serial_number
+            }
+        }
+    })
+    .to_string();
 
-/// Bind on 127.0.0.1:0, open the browser, then accept the first request and
-/// extract the `code` query parameter from the redirect URL.
-async fn wait_for_callback(listener: TcpListener, auth_url: &str) -> Result<String> {
-    // Open the browser after the listener is ready so we don't miss a fast redirect.
-    eprintln!("Opening browser for Amazon login...");
-    eprintln!("If the browser does not open automatically, visit:");
-    eprintln!("  {}", auth_url);
+    let resp = http
+        .post(AMAZON_CODEPAIR_URL)
+        .form(&[
+            ("response_type", "device_code"),
+            ("client_id", client_id),
+            ("scope", OAUTH_SCOPES),
+            ("scope_data", &scope_data),
+        ])
+        .send()
+        .await
+        .context("Failed to POST to Amazon device-code endpoint")?;
 
-    if let Err(e) = webbrowser::open(auth_url) {
-        eprintln!("Warning: could not open browser automatically ({})", e);
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        bail!(
+            "Failed to request a device code (HTTP {}): {}",
+            status.as_u16(),
+            body
+        );
     }
 
-    // Accept exactly one connection — the OAuth callback redirect.
-    let (stream, _) = listener
-        .accept()
-        .await
-        .context("Failed to accept OAuth callback connection")?;
-
-    let mut reader = BufReader::new(stream);
-    let mut request_line = String::new();
-    reader
-        .read_line(&mut request_line)
-        .await
-        .context("Failed to read callback request")?;
-
-    // Request line looks like: GET /callback?code=XXXX&state=YYY HTTP/1.1
-    let code = request_line
-        .split_whitespace()
-        .nth(1) // path + query
-        .and_then(|path| {
-            url::Url::parse(&format!("http://localhost{}", path))
-                .ok()
-                .and_then(|u| {
-                    u.query_pairs()
-                        .find(|(k, _)| k == "code")
-                        .map(|(_, v)| v.into_owned())
-                })
-        })
-        .context(
-            "Amazon did not return an authorization code. \
-             Check that your LWA redirect URI is configured correctly.",
-        )?;
-
-    // Respond to the browser so the tab shows a success message.
-    let body = "\
-        <!doctype html><html><body>\
-        <h2>Login successful</h2>\
-        <p>You can close this tab and return to the terminal.</p>\
-        </body></html>";
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
-        body.len(),
-        body
-    );
-    // Best-effort write; ignore errors (tab might already be closed).
-    let _ = reader.get_mut().write_all(response.as_bytes()).await;
-
-    Ok(code)
+    serde_json::from_str(&body).context("Failed to parse device-code response from Amazon")
 }
 
-// ── Token exchange ────────────────────────────────────────────────────────────
+// ── Token polling ─────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 struct TokenResponse {
@@ -124,42 +104,80 @@ struct TokenResponse {
     expires_in: Option<u64>,
 }
 
-async fn exchange_code_for_tokens(
+#[derive(Deserialize)]
+struct TokenErrorResponse {
+    error: String,
+}
+
+/// Outcome of a single poll of the token endpoint.
+enum PollOutcome {
+    Success(TokenResponse),
+    Pending,
+    SlowDown,
+    Denied,
+    Expired,
+}
+
+/// Classify a token-endpoint response by HTTP status and body.
+fn classify_poll_response(status_success: bool, body: &str) -> Result<PollOutcome> {
+    if status_success {
+        let tokens: TokenResponse =
+            serde_json::from_str(body).context("Failed to parse token response from Amazon")?;
+        return Ok(PollOutcome::Success(tokens));
+    }
+
+    let err: TokenErrorResponse = serde_json::from_str(body)
+        .with_context(|| format!("Unexpected error response from Amazon: {}", body))?;
+
+    match err.error.as_str() {
+        "authorization_pending" => Ok(PollOutcome::Pending),
+        "slow_down" => Ok(PollOutcome::SlowDown),
+        "access_denied" => Ok(PollOutcome::Denied),
+        "expired_token" => Ok(PollOutcome::Expired),
+        other => bail!("Amazon returned an unexpected error: {}", other),
+    }
+}
+
+async fn poll_for_tokens(
     client_id: &str,
-    client_secret: Option<&str>,
-    code: &str,
-    redirect_uri: &str,
-    code_verifier: &str,
+    device_code: &str,
+    user_code: &str,
+    interval: u64,
 ) -> Result<TokenResponse> {
     let http = reqwest::Client::new();
+    let mut interval = Duration::from_secs(interval.max(1));
 
-    let mut params = vec![
-        ("grant_type", "authorization_code"),
-        ("code", code),
-        ("redirect_uri", redirect_uri),
-        ("client_id", client_id),
-        ("code_verifier", code_verifier),
-    ];
-    let secret_owned;
-    if let Some(s) = client_secret {
-        secret_owned = s.to_string();
-        params.push(("client_secret", &secret_owned));
+    loop {
+        tokio::time::sleep(interval).await;
+
+        let resp = http
+            .post(AMAZON_TOKEN_URL)
+            .form(&[
+                ("grant_type", "device_code"),
+                ("device_code", device_code),
+                ("user_code", user_code),
+                ("client_id", client_id),
+            ])
+            .send()
+            .await
+            .context("Failed to POST to Amazon token endpoint")?;
+
+        let status_success = resp.status().is_success();
+        let body = resp.text().await.unwrap_or_default();
+
+        match classify_poll_response(status_success, &body)? {
+            PollOutcome::Success(tokens) => return Ok(tokens),
+            PollOutcome::Pending => continue,
+            PollOutcome::SlowDown => {
+                interval += Duration::from_secs(5);
+                continue;
+            }
+            PollOutcome::Denied => bail!("Login was denied. Please try again."),
+            PollOutcome::Expired => {
+                bail!("The device code expired before login was completed. Please try again.")
+            }
+        }
     }
-
-    let resp = http
-        .post(AMAZON_TOKEN_URL)
-        .form(&params)
-        .send()
-        .await
-        .context("Failed to POST to Amazon token endpoint")?;
-
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    if !status.is_success() {
-        bail!("Token exchange failed (HTTP {}): {}", status.as_u16(), body);
-    }
-
-    serde_json::from_str(&body).context("Failed to parse token response from Amazon")
 }
 
 // ── Session establishment ─────────────────────────────────────────────────────
@@ -185,9 +203,7 @@ async fn establish_session_from_token(
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         bail!(
-            "Session cookie exchange failed (HTTP {}): {}\n\
-             Ensure your LWA Security Profile has 'alexa:all' in its allowed scopes \
-             and that the redirect URI is set to http://127.0.0.1",
+            "Session cookie exchange failed (HTTP {}): {}",
             status.as_u16(),
             body
         );
@@ -234,71 +250,51 @@ pub fn clear_refresh_token() {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-/// Full browser-based PKCE login flow.
+/// Full device-pairing (Code-Based Linking) login flow.
 ///
-/// Opens the system browser, lets the user authenticate through Amazon's
-/// official login UI (the CLI never sees the password), then exchanges the
-/// resulting tokens for alexa.amazon.com session cookies.
-pub async fn browser_login(
+/// Displays a short code for the user to enter at https://amazon.com/code,
+/// then polls Amazon until login completes. The CLI never sees the user's
+/// password.
+pub async fn device_code_login(
     client_id: &str,
-    client_secret: Option<&str>,
+    product_id: &str,
+    device_serial_number: &str,
     cookie_store: Arc<CookieStoreMutex>,
     settings: &mut Settings,
 ) -> Result<()> {
-    // 1. PKCE
-    let code_verifier = generate_code_verifier();
-    let code_challenge = derive_code_challenge(&code_verifier);
+    // 1. Request a code pair.
+    let pair = request_code_pair(client_id, product_id, device_serial_number).await?;
+    let verification_uri = pair.verification_uri.as_deref().unwrap_or(VERIFICATION_URI);
 
-    // 2. Bind local listener
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .context("Failed to bind local OAuth callback server")?;
-    let port = listener
-        .local_addr()
-        .context("Failed to get local address")?
-        .port();
-    let redirect_uri = format!("http://127.0.0.1:{}/callback", port);
+    // 2. Show the user the code.
+    eprintln!();
+    eprintln!("To sign in, visit:");
+    eprintln!("  {}", verification_uri);
+    eprintln!("and enter this code:");
+    eprintln!();
+    eprintln!("  {}", pair.user_code);
+    eprintln!();
+    if let Some(secs) = pair.expires_in {
+        eprintln!("(this code expires in {} minutes)", secs / 60);
+    }
+    if let Err(e) = webbrowser::open(verification_uri) {
+        eprintln!("(Could not open browser automatically: {})", e);
+    }
+    eprintln!("Waiting for you to approve the login...");
 
-    // 3. Build authorization URL
-    let state = URL_SAFE_NO_PAD.encode({
-        let mut b = [0u8; 16];
-        rand::thread_rng().fill_bytes(&mut b);
-        b
-    });
-    let auth_url = format!(
-        "{}?client_id={}&scope={}&response_type=code\
-         &redirect_uri={}&code_challenge={}&code_challenge_method=S256&state={}",
-        AMAZON_AUTH_URL,
-        urlencoding::encode(client_id),
-        OAUTH_SCOPES,
-        urlencoding::encode(&redirect_uri),
-        urlencoding::encode(&code_challenge),
-        urlencoding::encode(&state),
-    );
+    // 3. Poll until the user approves (or the code expires).
+    let interval = pair.interval.unwrap_or(5);
+    let tokens = poll_for_tokens(client_id, &pair.device_code, &pair.user_code, interval).await?;
 
-    // 4. Wait for callback (opens browser inside)
-    let code = wait_for_callback(listener, &auth_url).await?;
-
-    // 5. Exchange code → tokens
-    eprintln!("Exchanging authorization code for tokens...");
-    let tokens = exchange_code_for_tokens(
-        client_id,
-        client_secret,
-        &code,
-        &redirect_uri,
-        &code_verifier,
-    )
-    .await?;
-
-    // 6. Persist refresh token
+    // 4. Persist refresh token.
     if let Some(ref rt) = tokens.refresh_token {
         store_refresh_token(rt)?;
     }
 
-    // 7. Exchange access_token for alexa.amazon.com session cookies
+    // 5. Exchange access_token for alexa.amazon.com session cookies.
     establish_session_from_token(&tokens.access_token, Arc::clone(&cookie_store), settings).await?;
 
-    // 8. Persist cookies + settings
+    // 6. Persist cookies + settings.
     save_cookie_store(&cookie_store)?;
 
     // Derive email from token if not already set (best-effort; not critical).
@@ -339,54 +335,86 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_code_verifier_is_43_plus_chars() {
-        let v = generate_code_verifier();
-        // RFC 7636: code_verifier must be 43-128 characters
-        assert!(v.len() >= 43, "verifier too short: {}", v.len());
-        assert!(v.len() <= 128, "verifier too long: {}", v.len());
+    fn test_classify_poll_response_success() {
+        let body = r#"{"access_token":"atza_x","refresh_token":"Atzr_y","expires_in":3600}"#;
+        let outcome = classify_poll_response(true, body).expect("should parse");
+        match outcome {
+            PollOutcome::Success(tokens) => {
+                assert_eq!(tokens.access_token, "atza_x");
+                assert_eq!(tokens.refresh_token.as_deref(), Some("Atzr_y"));
+                assert_eq!(tokens.expires_in, Some(3600));
+            }
+            _ => panic!("expected Success outcome"),
+        }
     }
 
     #[test]
-    fn test_code_verifier_is_base64url_chars_only() {
-        let v = generate_code_verifier();
-        assert!(
-            v.chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
-            "verifier contains invalid chars: {}",
-            v
+    fn test_classify_poll_response_pending() {
+        let body = r#"{"error":"authorization_pending"}"#;
+        let outcome = classify_poll_response(false, body).expect("should parse");
+        assert!(matches!(outcome, PollOutcome::Pending));
+    }
+
+    #[test]
+    fn test_classify_poll_response_slow_down() {
+        let body = r#"{"error":"slow_down"}"#;
+        let outcome = classify_poll_response(false, body).expect("should parse");
+        assert!(matches!(outcome, PollOutcome::SlowDown));
+    }
+
+    #[test]
+    fn test_classify_poll_response_denied() {
+        let body = r#"{"error":"access_denied"}"#;
+        let outcome = classify_poll_response(false, body).expect("should parse");
+        assert!(matches!(outcome, PollOutcome::Denied));
+    }
+
+    #[test]
+    fn test_classify_poll_response_expired() {
+        let body = r#"{"error":"expired_token"}"#;
+        let outcome = classify_poll_response(false, body).expect("should parse");
+        assert!(matches!(outcome, PollOutcome::Expired));
+    }
+
+    #[test]
+    fn test_classify_poll_response_unexpected_error_bails() {
+        let body = r#"{"error":"invalid_client"}"#;
+        let result = classify_poll_response(false, body);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_classify_poll_response_malformed_body_bails() {
+        let result = classify_poll_response(false, "not json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_codepair_response_parses_minimal_fields() {
+        let body = r#"{"user_code":"ABCD1234","device_code":"dev_xyz"}"#;
+        let pair: CodePairResponse = serde_json::from_str(body).expect("should parse");
+        assert_eq!(pair.user_code, "ABCD1234");
+        assert_eq!(pair.device_code, "dev_xyz");
+        assert!(pair.verification_uri.is_none());
+        assert!(pair.interval.is_none());
+        assert!(pair.expires_in.is_none());
+    }
+
+    #[test]
+    fn test_codepair_response_parses_all_fields() {
+        let body = r#"{
+            "user_code":"ABCD1234",
+            "device_code":"dev_xyz",
+            "verification_uri":"https://amazon.com/code",
+            "interval":5,
+            "expires_in":600
+        }"#;
+        let pair: CodePairResponse = serde_json::from_str(body).expect("should parse");
+        assert_eq!(
+            pair.verification_uri.as_deref(),
+            Some("https://amazon.com/code")
         );
-    }
-
-    #[test]
-    fn test_code_challenge_is_base64url_chars_only() {
-        let v = generate_code_verifier();
-        let c = derive_code_challenge(&v);
-        assert!(
-            c.chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
-            "challenge contains invalid chars: {}",
-            c
-        );
-    }
-
-    #[test]
-    fn test_code_challenge_differs_from_verifier() {
-        let v = generate_code_verifier();
-        let c = derive_code_challenge(&v);
-        assert_ne!(v, c);
-    }
-
-    #[test]
-    fn test_code_challenge_is_deterministic() {
-        let v = generate_code_verifier();
-        assert_eq!(derive_code_challenge(&v), derive_code_challenge(&v));
-    }
-
-    #[test]
-    fn test_known_pkce_vector() {
-        // RFC 7636 Appendix B test vector
-        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-        let expected_challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
-        assert_eq!(derive_code_challenge(verifier), expected_challenge);
+        assert_eq!(pair.interval, Some(5));
+        assert_eq!(pair.expires_in, Some(600));
     }
 }

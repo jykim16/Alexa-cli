@@ -103,11 +103,12 @@ pub enum Commands {
 pub enum AuthCommands {
     /// Log in with your Amazon account.
     ///
-    /// When `lwa_client_id` is set in config, opens your browser for a
-    /// password-free OAuth PKCE flow. Otherwise falls back to form-based login
+    /// When `lwa_client_id` and `avs_product_id` are set in config, uses a
+    /// password-free device-pairing flow: you enter a short code at
+    /// https://amazon.com/code. Otherwise falls back to form-based login
     /// (email + password entered in the terminal).
     Login {
-        /// Amazon account email (required for form-based login; optional for browser OAuth)
+        /// Amazon account email (required for form-based login; optional for device pairing)
         #[arg(long)]
         email: Option<String>,
     },
