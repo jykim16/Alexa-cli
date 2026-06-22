@@ -1,14 +1,4 @@
-pub mod alarm;
 pub mod ask;
 pub mod auth;
 pub mod devices;
-pub mod dnd;
-pub mod history;
-pub mod media;
-pub mod reminder;
-pub mod routines;
-pub mod shopping;
-pub mod smart_home;
 pub mod speak;
-pub mod timer;
-pub mod todo;

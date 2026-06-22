@@ -15,7 +15,7 @@ You'll need the OTP code from your authenticator app each time you log in.
 
 ```bash
 cargo build --release
-cp target/release/alexa-cli ~/.local/bin/
+cargo install --path .
 ```
 
 ## Authentication
@@ -35,14 +35,27 @@ alexa-cli devices list
 # Make Alexa speak
 alexa-cli speak say "hello" --device "Living Room Echo"
 
-# Ask Alexa a question (device speaks the answer)
+# Ask Alexa anything (just like voice)
 alexa-cli ask "what's the weather" --device "Living Room Echo"
 
+# Set timers, alarms, reminders
+alexa-cli ask "set a 5 minute timer" -d "Kitchen Echo"
+alexa-cli ask "set an alarm for 7am" -d "Bedroom Echo"
+alexa-cli ask "remind me to call mom at 3pm" -d "Office Echo"
+
 # Control smart home
-alexa-cli smart-home power "Desk Lamp" off
+alexa-cli ask "turn on the living room lights" -d "Living Room Echo"
+alexa-cli ask "set thermostat to 72" -d "Living Room Echo"
+
+# Shopping and to-do lists
+alexa-cli ask "add milk to my shopping list" -d "Kitchen Echo"
+alexa-cli ask "what's on my to-do list" -d "Office Echo"
 
 # Play music
-alexa-cli media music "jazz" --device "Living Room Echo"
+alexa-cli ask "play jazz music" -d "Living Room Echo"
+
+# Broadcast to all devices
+alexa-cli speak announce "Dinner is ready"
 ```
 
 Run `alexa-cli --help` for all commands.
