@@ -24,9 +24,9 @@ pub async fn cmd_login(email: &str, output: OutputFormat) -> Result<()> {
         }
     }
 
-    // Primary: OAuth device registration login
-    let password = rpassword::prompt_password("Amazon password: ")?;
-    crate::auth::device_login::login(email, &password, &mut settings).await?;
+    // Primary: Browser-based login
+
+    crate::auth::device_login::login(email, "", &mut settings).await?;
 
     match output {
         OutputFormat::Json => println!("{{\"status\":\"authenticated\",\"email\":\"{}\"}}", email),

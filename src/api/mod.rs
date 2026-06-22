@@ -41,18 +41,47 @@ impl ApiClient {
         // Build raw cookie string from cookie file for direct header injection
         let raw_cookies = crate::auth::cookie_store::load_raw_cookie_string()?;
 
-        // Extract csrf from the raw cookies
-        let csrf = raw_cookies
-            .split(';')
-            .find_map(|pair| {
-                let pair = pair.trim();
-                if pair.starts_with("csrf=") {
-                    Some(pair[5..].to_string())
-                } else {
-                    None
+        // Hit bootstrap to get csrf from Set-Cookie header
+        let csrf = {
+            let bootstrap_url = format!("{}/api/bootstrap?version=0", base_url);
+            let resp = http
+                .get(&bootstrap_url)
+                .header("Cookie", &raw_cookies)
+                .send()
+                .await
+                .ok();
+
+            let mut csrf_val = String::new();
+            if let Some(r) = resp {
+                for cookie_str in r.headers().get_all("set-cookie") {
+                    if let Ok(s) = cookie_str.to_str() {
+                        if s.starts_with("csrf=") {
+                            if let Some(end) = s.find(';') {
+                                csrf_val = s[5..end].to_string();
+                            }
+                        }
+                    }
                 }
-            })
-            .unwrap_or_default();
+            }
+            // Fallback: check raw_cookies
+            if csrf_val.is_empty() {
+                csrf_val = raw_cookies
+                    .split(';')
+                    .find_map(|pair| {
+                        let pair = pair.trim();
+                        pair.strip_prefix("csrf=").map(|v| v.to_string())
+                    })
+                    .unwrap_or_default();
+            }
+            csrf_val
+        };
+
+        // Append csrf to raw_cookies if not already there
+        let raw_cookies = if !csrf.is_empty() && !raw_cookies.contains("csrf=") {
+            format!("{}; csrf={}", raw_cookies, csrf)
+        } else {
+            raw_cookies
+        };
 
         Ok(Self {
             http,
