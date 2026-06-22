@@ -119,13 +119,7 @@ pub async fn login(
         .await
         .context("Failed to load Alexa SPA")?;
 
-    // Debug: dump cookies we have
-    {
-        let store = cookie_store.lock().unwrap();
-        let url = url::Url::parse(&settings.base_url).unwrap();
-        let cookies: Vec<_> = store.get_request_values(&url).collect();
-        eprintln!("[debug] cookies for {}: {:?}", settings.base_url, cookies.iter().map(|(n,_)| *n).collect::<Vec<_>>());
-    }
+
 
     // Step 5: Persist cookies
     save_cookie_store(&cookie_store)?;

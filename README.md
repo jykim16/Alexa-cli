@@ -6,15 +6,10 @@ Control Amazon Alexa from your terminal.
 
 ### Prerequisites
 
-1. **Python 3** with the `aioamazondevices` package:
-   ```bash
-   pip3 install aioamazondevices
-   ```
+**Two-Factor Authentication (2FA)** must be enabled on your Amazon account.
+Enable it at: https://www.amazon.com/a/settings/approval
 
-2. **Two-Factor Authentication (2FA)** must be enabled on your Amazon account.
-   Enable it at: https://www.amazon.com/a/settings/approval
-
-   You'll need the OTP code from your authenticator app each time you log in.
+You'll need the OTP code from your authenticator app each time you log in.
 
 ### Build
 

@@ -1,1 +1,7 @@
 /target
+
+# Credentials and secrets
+*.pem
+*.key
+.env
+.env.*

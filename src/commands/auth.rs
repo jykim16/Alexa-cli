@@ -1,14 +1,17 @@
 use anyhow::{Context, Result};
+use std::sync::Arc;
 
-use crate::auth::{clear_cookie_store, fetch_csrf, load_cookie_store, save_cookie_store};
+use crate::auth::{clear_cookie_store, fetch_csrf, load_cookie_store, login, save_cookie_store};
 use crate::auth::login::build_client;
 use crate::cli::OutputFormat;
 use crate::config::Settings;
 
 pub async fn cmd_login(email: &str, output: OutputFormat) -> Result<()> {
     let mut settings = Settings::load()?;
+    let cookie_store = load_cookie_store()?;
 
-    crate::auth::device_login::login(email, "", &mut settings).await?;
+    let password = rpassword::prompt_password("Amazon password: ")?;
+    login(email, &password, Arc::clone(&cookie_store), &mut settings).await?;
 
     match output {
         OutputFormat::Json => println!("{{\"status\":\"authenticated\",\"email\":\"{}\"}}", email),
