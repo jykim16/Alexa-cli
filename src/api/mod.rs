@@ -37,7 +37,21 @@ impl ApiClient {
         let http = build_client(Arc::clone(&cookie_store))?;
         let base_url = settings.base_url.clone();
 
-        let csrf = fetch_csrf(&http, &base_url).await?;
+        // Try bootstrap first, fall back to csrf cookie value
+        let csrf = match fetch_csrf(&http, &base_url).await {
+            Ok(token) => token,
+            Err(_) => {
+                // Extract csrf from cookie store
+                let store = cookie_store.lock().unwrap();
+                let url = url::Url::parse(&base_url).unwrap();
+                let val = store
+                    .get_request_values(&url)
+                    .find(|(name, _)| *name == "csrf")
+                    .map(|(_, val)| val.to_string())
+                    .unwrap_or_default();
+                val
+            }
+        };
 
         Ok(Self {
             http,
@@ -48,11 +62,11 @@ impl ApiClient {
         })
     }
 
-    fn alexa_headers(&self) -> Vec<(&'static str, String)> {
+    pub(crate) fn alexa_headers(&self) -> Vec<(&'static str, String)> {
         vec![
             ("Accept", "application/json".to_string()),
             ("Content-Type", "application/json; charset=UTF-8".to_string()),
-            ("X-Csrf-Token", self.csrf.clone()),
+            ("csrf", self.csrf.clone()),
             (
                 "Referer",
                 format!("{}/spa/index.html", self.base_url),

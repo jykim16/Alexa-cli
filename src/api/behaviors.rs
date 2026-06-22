@@ -21,7 +21,17 @@ async fn post_behavior(client: &ApiClient, sequence: serde_json::Value) -> Resul
         status: "ENABLED".to_string(),
     };
 
-    let _: serde_json::Value = client.post("/api/behaviors/preview", &req).await?;
+    let url = format!("{}/api/behaviors/preview", client.base_url);
+    let mut http_req = client.http.post(&url);
+    for (k, v) in client.alexa_headers() {
+        http_req = http_req.header(k, v);
+    }
+    let resp = http_req.json(&req).send().await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(AlexaError::from_status(status, &body));
+    }
     Ok(())
 }
 
@@ -31,6 +41,7 @@ pub async fn speak(
     text: &str,
     serial_number: &str,
     device_type: &str,
+    owner_customer_id: &str,
     locale: &str,
 ) -> Result<(), AlexaError> {
     let sequence = json!({
@@ -42,6 +53,7 @@ pub async fn speak(
                 "deviceType": device_type,
                 "deviceSerialNumber": serial_number,
                 "locale": locale,
+                "customerId": owner_customer_id,
                 "textToSpeak": text
             }
         }
@@ -125,6 +137,33 @@ pub async fn play_music(
                 "locale": locale,
                 "musicProviderId": provider,
                 "searchPhrase": query
+            }
+        }
+    });
+    post_behavior(client, sequence).await
+}
+
+/// Send a text command to a device (simulates a voice query — device speaks the answer).
+pub async fn text_command(
+    client: &ApiClient,
+    text: &str,
+    serial_number: &str,
+    device_type: &str,
+    owner_customer_id: &str,
+    locale: &str,
+) -> Result<(), AlexaError> {
+    let sequence = json!({
+        "@type": "com.amazon.alexa.behaviors.model.Sequence",
+        "startNode": {
+            "@type": "com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode",
+            "type": "Alexa.TextCommand",
+            "skillId": "amzn1.ask.1p.tellalexa",
+            "operationPayload": {
+                "deviceType": device_type,
+                "deviceSerialNumber": serial_number,
+                "locale": locale,
+                "customerId": owner_customer_id,
+                "text": text.to_lowercase()
             }
         }
     });

@@ -1,6 +1,6 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 
-use crate::auth::{clear_cookie_store, load_cookie_store, login};
+use crate::auth::{clear_cookie_store, load_cookie_store, login, save_cookie_store};
 use crate::auth::login::build_client;
 use crate::auth::fetch_csrf;
 use crate::cli::OutputFormat;
@@ -20,6 +20,77 @@ pub async fn cmd_login(email: &str, output: OutputFormat) -> Result<()> {
         }
         _ => {
             println!("Logged in as {}", email);
+        }
+    }
+    Ok(())
+}
+
+pub async fn cmd_import_cookies(output: OutputFormat) -> Result<()> {
+    use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
+    use std::sync::Arc;
+
+    eprintln!("Open https://alexa.amazon.com in your browser and log in.");
+    eprintln!("Then open DevTools (F12) → Console, and run:");
+    eprintln!("  document.cookie");
+    eprintln!("Paste the output below (the full cookie string):");
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).context("Failed to read input")?;
+    let cookie_str = input.trim();
+
+    if cookie_str.is_empty() {
+        anyhow::bail!("No cookies provided");
+    }
+
+    // Parse cookie string into the cookie store
+    let store = CookieStore::default();
+    let store = Arc::new(CookieStoreMutex::new(store));
+    {
+        let mut s = store.lock().unwrap();
+        let alexa_url = url::Url::parse("https://alexa.amazon.com/").unwrap();
+        let amazon_url = url::Url::parse("https://www.amazon.com/").unwrap();
+        for pair in cookie_str.split(';') {
+            let pair = pair.trim();
+            if pair.is_empty() {
+                continue;
+            }
+            // Set on alexa.amazon.com
+            let set_cookie = format!("{}; Domain=.amazon.com; Path=/; Secure", pair);
+            let _ = s.parse(&set_cookie, &alexa_url);
+            // Also set directly for alexa subdomain
+            let set_cookie2 = format!("{}; Domain=alexa.amazon.com; Path=/; Secure", pair);
+            let _ = s.parse(&set_cookie2, &alexa_url);
+            let _ = s.parse(&set_cookie, &amazon_url);
+        }
+    }
+
+    save_cookie_store(&store)?;
+
+    // Verify it works
+    let http = build_client(Arc::clone(&store))?;
+    let settings = Settings::load()?;
+    match fetch_csrf(&http, &settings.base_url).await {
+        Ok(_) => {
+            let mut settings = settings;
+            settings.mark_authenticated();
+            settings.save()?;
+            match output {
+                OutputFormat::Json => println!("{{\"status\":\"authenticated\"}}"),
+                _ => println!("Cookies imported and verified. Session is valid."),
+            }
+        }
+        Err(_) => {
+            // Still save — behaviors API may work even without CSRF
+            let mut settings = settings;
+            settings.mark_authenticated();
+            settings.save()?;
+            match output {
+                OutputFormat::Json => println!("{{\"status\":\"partial\"}}"),
+                _ => {
+                    println!("Cookies imported. CSRF validation failed but some commands may still work.");
+                    println!("Try: alexa-cli speak say \"test\" --device \"Big Show\"");
+                }
+            }
         }
     }
     Ok(())

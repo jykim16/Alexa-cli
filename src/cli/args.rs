@@ -50,6 +50,11 @@ pub enum Commands {
         #[command(subcommand)]
         cmd: SpeakCommands,
     },
+    /// Ask Alexa a question (device speaks the answer)
+    Ask {
+        /// Question or command to send to Alexa
+        text: String,
+    },
     /// Manage alarms
     Alarm {
         #[command(subcommand)]
@@ -107,6 +112,8 @@ pub enum AuthCommands {
         #[arg(long)]
         email: String,
     },
+    /// Import cookies from browser (paste from EditThisCookie or cookie header)
+    ImportCookies,
     /// Clear stored session cookies
     Logout,
     /// Show current authentication status

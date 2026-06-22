@@ -9,9 +9,10 @@ pub struct Device {
     pub device_family: String,
     pub device_type: String,
     pub serial_number: String,
+    pub device_owner_customer_id: Option<String>,
     pub software_version: Option<String>,
     pub online: Option<bool>,
-    pub capabilities: Option<Vec<Capability>>,
+    pub capabilities: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

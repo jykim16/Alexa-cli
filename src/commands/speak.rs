@@ -24,7 +24,7 @@ pub async fn cmd_say(
 
     match dev {
         Some(d) => {
-            behaviors::speak(&client, text, &d.serial_number, &d.device_type, &locale).await?;
+            behaviors::speak(&client, text, &d.serial_number, &d.device_type, d.device_owner_customer_id.as_deref().unwrap_or(""), &locale).await?;
             match output {
                 OutputFormat::Json => println!("{{\"said\":\"{}\"}}", text),
                 _ => println!("Said: \"{}\"", text),

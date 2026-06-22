@@ -36,6 +36,9 @@ async fn run() -> Result<()> {
             AuthCommands::Login { email } => {
                 commands::auth::cmd_login(&email, out).await?;
             }
+            AuthCommands::ImportCookies => {
+                commands::auth::cmd_import_cookies(out).await?;
+            }
             AuthCommands::Logout => {
                 commands::auth::cmd_logout(out).await?;
             }
@@ -78,6 +81,11 @@ async fn run() -> Result<()> {
             SpeakCommands::Announce { text, devices } => {
                 commands::speak::cmd_announce(&text, devices.as_deref(), out).await?;
             }
+        },
+
+        // ── Ask ──────────────────────────────────────────────────────────
+        Commands::Ask { text } => {
+            commands::ask::cmd_ask(&text, dev, out).await?;
         },
 
         // ── Alarm ─────────────────────────────────────────────────────────
