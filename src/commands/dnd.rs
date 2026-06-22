@@ -15,9 +15,7 @@ pub async fn cmd_status(device_name: Option<&str>, output: OutputFormat) -> Resu
         if let Some(dev) = devices::find_device(&devs, name) {
             statuses
                 .iter()
-                .filter(|s| {
-                    s.device_serial_number.as_deref() == Some(&dev.serial_number)
-                })
+                .filter(|s| s.device_serial_number.as_deref() == Some(&dev.serial_number))
                 .collect()
         } else {
             bail!("Device not found: {}", name);
@@ -36,7 +34,11 @@ pub async fn cmd_status(device_name: Option<&str>, output: OutputFormat) -> Resu
                 println!(
                     "  {}  DND: {}",
                     s.device_serial_number.as_deref().unwrap_or("?"),
-                    if s.enabled.unwrap_or(false) { "ON" } else { "OFF" }
+                    if s.enabled.unwrap_or(false) {
+                        "ON"
+                    } else {
+                        "OFF"
+                    }
                 );
             }
         }
@@ -49,7 +51,9 @@ pub async fn cmd_set(enabled: bool, device_name: Option<&str>, output: OutputFor
     let client = ApiClient::new(Arc::clone(&settings)).await?;
     let devs = devices::list_devices(&client).await?;
 
-    let name = device_name.or(settings.default_device.as_deref()).unwrap_or("");
+    let name = device_name
+        .or(settings.default_device.as_deref())
+        .unwrap_or("");
     let dev = if name.is_empty() {
         devs.first()
     } else {

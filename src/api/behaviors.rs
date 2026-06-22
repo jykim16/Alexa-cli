@@ -12,8 +12,8 @@ struct BehaviorPreviewRequest {
 }
 
 async fn post_behavior(client: &ApiClient, sequence: serde_json::Value) -> Result<(), AlexaError> {
-    let seq_json = serde_json::to_string(&sequence)
-        .map_err(|e| AlexaError::Other(e.to_string()))?;
+    let seq_json =
+        serde_json::to_string(&sequence).map_err(|e| AlexaError::Other(e.to_string()))?;
 
     let req = BehaviorPreviewRequest {
         behavior_id: "PREVIEW".to_string(),
@@ -143,4 +143,164 @@ pub async fn run_routine_sequence(
     };
     let _: serde_json::Value = client.post("/api/behaviors/preview", &req).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Settings;
+    use mockito::Server;
+    use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
+    use std::sync::Arc;
+
+    fn make_client(server: &mockito::Server) -> crate::api::ApiClient {
+        let cookie_store = Arc::new(CookieStoreMutex::new(CookieStore::default()));
+        let http = reqwest::Client::builder()
+            .cookie_provider(Arc::clone(&cookie_store))
+            .build()
+            .unwrap();
+        crate::api::ApiClient {
+            http,
+            csrf: "test-csrf".to_string(),
+            base_url: server.url(),
+            cookie_store,
+            settings: Arc::new(Settings::default()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_speak_sends_alexa_speak_payload() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/behaviors/preview")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .match_body(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::Regex("Alexa\\.Speak".to_string()),
+                mockito::Matcher::Regex("hello world".to_string()),
+            ]))
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = speak(&client, "hello world", "SN1", "T1", "en-US").await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_announce_sends_alexa_announcement_with_device_serials() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/behaviors/preview")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .match_body(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::Regex("AlexaAnnouncement".to_string()),
+                mockito::Matcher::Regex("SN-DEVICE-1".to_string()),
+                mockito::Matcher::Regex("SN-DEVICE-2".to_string()),
+            ]))
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let devices = vec![
+            ("SN-DEVICE-1".to_string(), "T1".to_string()),
+            ("SN-DEVICE-2".to_string(), "T2".to_string()),
+        ];
+        let result = announce(&client, "Good morning!", &devices, "en-US").await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_play_music_spotify_sends_correct_provider() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/behaviors/preview")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .match_body(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::Regex("SPOTIFY".to_string()),
+                mockito::Matcher::Regex("Alexa\\.Music\\.PlaySearchPhrase".to_string()),
+            ]))
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = play_music(
+            &client,
+            "rock classics",
+            "SN1",
+            "T1",
+            "en-US",
+            Some("spotify"),
+        )
+        .await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_play_music_amazon_music_sends_correct_provider() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/behaviors/preview")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .match_body(mockito::Matcher::Regex("AMAZON_MUSIC".to_string()))
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = play_music(&client, "jazz", "SN1", "T1", "en-US", Some("amazon-music")).await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_play_music_none_service_defaults_to_amazon_music() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/behaviors/preview")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .match_body(mockito::Matcher::Regex("AMAZON_MUSIC".to_string()))
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = play_music(&client, "classical", "SN1", "T1", "en-US", None).await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_run_routine_sequence_sends_sequence_json_in_body() {
+        let mut server = Server::new_async().await;
+        let raw_seq = r#"{"startNode":{"type":"AlexaSpeak"}}"#;
+        // The sequence_json field will be a JSON-encoded string containing raw_seq
+        let mock = server
+            .mock("POST", "/api/behaviors/preview")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("{}")
+            .match_body(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::Regex("PREVIEW".to_string()),
+                mockito::Matcher::Regex("ENABLED".to_string()),
+                mockito::Matcher::Regex("AlexaSpeak".to_string()),
+            ]))
+            .create_async()
+            .await;
+
+        let client = make_client(&server);
+        let result = run_routine_sequence(&client, raw_seq).await;
+        assert!(result.is_ok());
+        mock.assert_async().await;
+    }
 }

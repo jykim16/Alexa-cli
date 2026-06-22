@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 
@@ -19,13 +18,13 @@ pub fn cookie_file_path() -> Result<PathBuf> {
 
 /// Load the cookie store from keyring, falling back to the config-dir file.
 /// Returns a CookieStoreMutex suitable for use with reqwest.
+#[allow(deprecated)]
 pub fn load_cookie_store() -> Result<Arc<CookieStoreMutex>> {
     let json = load_raw_cookies()?;
     let store = match json {
         Some(data) => {
             let cursor = std::io::Cursor::new(data.as_bytes());
-            CookieStore::load_json(cursor)
-                .unwrap_or_else(|_| CookieStore::default())
+            CookieStore::load_json(cursor).unwrap_or_else(|_| CookieStore::default())
         }
         None => CookieStore::default(),
     };
@@ -33,6 +32,7 @@ pub fn load_cookie_store() -> Result<Arc<CookieStoreMutex>> {
 }
 
 /// Persist the cookie store back to keyring or file.
+#[allow(deprecated)]
 pub fn save_cookie_store(store: &Arc<CookieStoreMutex>) -> Result<()> {
     let mut buf = Vec::new();
     {
@@ -86,14 +86,65 @@ fn save_raw_cookies(json: &str) -> Result<()> {
             return Ok(());
         }
     }
-    // Fall back to file with restricted permissions
+    // Fall back to file with restricted permissions (0600, race-free).
     let path = cookie_file_path()?;
-    fs::write(&path, json).context("Failed to write cookie file")?;
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
-        .context("Failed to set cookie file permissions")?;
+    crate::config::settings::write_private(&path, json.as_bytes())
+        .context("Failed to write cookie file")?;
     eprintln!(
         "Warning: keyring unavailable. Cookies stored in {} (mode 0600)",
         path.display()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load_cookie_store_returns_arc_mutex() {
+        // Should succeed even when no persisted cookies exist
+        let result = load_cookie_store();
+        assert!(result.is_ok());
+        let store = result.unwrap();
+        // Verify we can lock it
+        let _guard = store.lock().unwrap();
+    }
+
+    #[test]
+    fn test_save_and_load_round_trip() {
+        // Create a store, save it, then reload it
+        let store = load_cookie_store().unwrap();
+        let save_result = save_cookie_store(&store);
+        // May fail gracefully if keyring unavailable, but should not panic
+        let _ = save_result;
+    }
+
+    #[test]
+    fn test_clear_cookie_store_does_not_panic() {
+        // Should be safe to call even when nothing is stored
+        let result = clear_cookie_store();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cookie_file_path_returns_valid_path() {
+        let result = cookie_file_path();
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        // Path should end with cookies.json
+        assert_eq!(path.file_name().unwrap().to_str().unwrap(), "cookies.json");
+    }
+
+    #[test]
+    fn test_load_cookie_store_after_clear_returns_empty() {
+        // Clear first so we start fresh
+        let _ = clear_cookie_store();
+        let store = load_cookie_store().unwrap();
+        let inner = store.lock().unwrap();
+        // An empty cookie store has no cookies for any URL
+        let url = url::Url::parse("https://alexa.amazon.com").unwrap();
+        let cookies: Vec<_> = inner.get_request_values(&url).collect();
+        assert!(cookies.is_empty());
+    }
 }

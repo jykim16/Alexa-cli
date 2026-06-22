@@ -101,13 +101,18 @@ pub enum Commands {
 
 #[derive(Subcommand, Debug)]
 pub enum AuthCommands {
-    /// Log in with your Amazon account
+    /// Log in with your Amazon account.
+    ///
+    /// When `lwa_client_id` and `avs_product_id` are set in config, uses a
+    /// password-free device-pairing flow: you enter a short code at
+    /// https://amazon.com/code. Otherwise falls back to form-based login
+    /// (email + password entered in the terminal).
     Login {
-        /// Amazon account email
+        /// Amazon account email (required for form-based login; optional for device pairing)
         #[arg(long)]
-        email: String,
+        email: Option<String>,
     },
-    /// Clear stored session cookies
+    /// Clear stored session cookies and OAuth tokens
     Logout,
     /// Show current authentication status
     Status,

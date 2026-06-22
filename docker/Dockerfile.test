@@ -1,0 +1,22 @@
+# Dockerfile used only for running the test suite (with cargo test).
+# The production binary Dockerfile is docker/Dockerfile.
+FROM rust:1.88-slim-bookworm
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libdbus-1-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Pre-fetch dependencies so subsequent runs are faster
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs \
+    && cargo fetch \
+    && rm -rf src
+
+COPY . .
+
+CMD ["cargo", "test", "--", "--include-ignored"]

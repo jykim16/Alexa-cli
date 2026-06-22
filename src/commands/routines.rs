@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use std::sync::Arc;
 
 use crate::api::{automations, behaviors, ApiClient};
@@ -49,7 +49,10 @@ pub async fn cmd_run(name: &str, output: OutputFormat) -> Result<()> {
             "{{\"ran\":\"{}\" }}",
             automation.name.as_deref().unwrap_or(name)
         ),
-        _ => println!("Ran routine: {}", automation.name.as_deref().unwrap_or(name)),
+        _ => println!(
+            "Ran routine: {}",
+            automation.name.as_deref().unwrap_or(name)
+        ),
     }
     Ok(())
 }

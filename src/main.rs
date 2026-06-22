@@ -34,7 +34,7 @@ async fn run() -> Result<()> {
         // ── Auth ─────────────────────────────────────────────────────────
         Commands::Auth { cmd } => match cmd {
             AuthCommands::Login { email } => {
-                commands::auth::cmd_login(&email, out).await?;
+                commands::auth::cmd_login(email.as_deref(), out).await?;
             }
             AuthCommands::Logout => {
                 commands::auth::cmd_logout(out).await?;
