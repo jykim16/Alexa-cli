@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Settings {
@@ -57,6 +57,34 @@ fn default_locale() -> String {
     "en-US".to_string()
 }
 
+/// Write `data` to `path`, creating it with owner-only (0600) permissions on
+/// Unix. The file is opened with the restricted mode up front (so there is no
+/// window where it is world-readable) and existing files are re-tightened
+/// before any data is written.
+pub(crate) fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+
+    let mut file = opts.open(path)?;
+
+    // If the file already existed, OpenOptions::mode is ignored, so explicitly
+    // tighten permissions before writing any sensitive bytes.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
+    }
+
+    file.write_all(data)
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -106,7 +134,9 @@ impl Settings {
     pub fn save(&self) -> Result<()> {
         let path = Self::config_path()?;
         let content = toml::to_string_pretty(self).context("Failed to serialize config")?;
-        fs::write(&path, content)
+        // The config may contain secrets (e.g. lwa_client_secret), so write it
+        // with owner-only (0600) permissions rather than the umask default.
+        write_private(&path, content.as_bytes())
             .with_context(|| format!("Failed to write config: {}", path.display()))?;
         Ok(())
     }
@@ -242,6 +272,30 @@ mod tests {
         // Simulate what load() does with the env var
         s.base_url = "http://localhost:9999".to_string();
         assert_eq!(s.base_url, "http://localhost:9999");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_write_private_creates_owner_only_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("alexa-cli-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("secret.toml");
+
+        write_private(&path, b"lwa_client_secret = \"shh\"").unwrap();
+
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "expected 0600, got {:o}", mode);
+
+        // Overwriting an existing (looser) file should re-tighten it.
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        write_private(&path, b"updated").unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "expected re-tightened 0600, got {:o}", mode);
+
+        fs::remove_file(&path).ok();
+        fs::remove_dir(&dir).ok();
     }
 
     #[test]

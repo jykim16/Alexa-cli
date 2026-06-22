@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -87,11 +86,10 @@ fn save_raw_cookies(json: &str) -> Result<()> {
             return Ok(());
         }
     }
-    // Fall back to file with restricted permissions
+    // Fall back to file with restricted permissions (0600, race-free).
     let path = cookie_file_path()?;
-    fs::write(&path, json).context("Failed to write cookie file")?;
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
-        .context("Failed to set cookie file permissions")?;
+    crate::config::settings::write_private(&path, json.as_bytes())
+        .context("Failed to write cookie file")?;
     eprintln!(
         "Warning: keyring unavailable. Cookies stored in {} (mode 0600)",
         path.display()
