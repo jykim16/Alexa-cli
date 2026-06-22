@@ -5,9 +5,7 @@ pub mod errors;
 use anyhow::Result;
 use std::sync::Arc;
 
-use reqwest_cookie_store::CookieStoreMutex;
-
-use crate::auth::{build_client, load_cookie_store, save_cookie_store};
+use crate::auth::{build_client, load_cookie_store};
 use crate::config::Settings;
 use errors::AlexaError;
 
@@ -16,8 +14,6 @@ pub struct ApiClient {
     pub http: reqwest::Client,
     pub csrf: String,
     pub base_url: String,
-    pub cookie_store: Arc<CookieStoreMutex>,
-    pub settings: Arc<Settings>,
     pub raw_cookies: String,
 }
 
@@ -73,8 +69,6 @@ impl ApiClient {
             http,
             csrf,
             base_url,
-            cookie_store,
-            settings,
             raw_cookies,
         })
     }
@@ -100,20 +94,6 @@ impl ApiClient {
         self.handle_response(resp).await
     }
 
-    pub async fn post<B: serde::Serialize, T: serde::de::DeserializeOwned>(
-        &self,
-        path: &str,
-        body: &B,
-    ) -> Result<T, AlexaError> {
-        let url = format!("{}{}", self.base_url, path);
-        let mut req = self.http.post(&url);
-        for (k, v) in self.alexa_headers() {
-            req = req.header(k, v);
-        }
-        let resp = req.json(body).send().await?;
-        self.handle_response(resp).await
-    }
-
     async fn handle_response<T: serde::de::DeserializeOwned>(
         &self,
         resp: reqwest::Response,
@@ -131,9 +111,5 @@ impl ApiClient {
             let body = resp.text().await.unwrap_or_default();
             Err(AlexaError::from_status(status, &body))
         }
-    }
-
-    pub fn persist_cookies(&self) -> Result<()> {
-        save_cookie_store(&self.cookie_store)
     }
 }

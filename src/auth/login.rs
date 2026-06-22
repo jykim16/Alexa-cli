@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use reqwest_cookie_store::CookieStoreMutex;
 
-use crate::auth::cookie_store::save_cookie_store;
 use crate::config::Settings;
 
 const LOGIN_URL: &str =
@@ -121,9 +120,7 @@ pub async fn login(
 
 
 
-    // Step 5: Persist cookies
-    save_cookie_store(&cookie_store)?;
-    // Also write raw cookie file for direct header injection
+    // Step 5: Persist cookies to file for direct header injection
     {
         let store = cookie_store.lock().unwrap();
         let url = url::Url::parse(&settings.base_url).unwrap();
